@@ -68,7 +68,10 @@ fun TxEditor(
     val typeCats = categories.filter { it.type == type }
 
     LaunchedEffect(accounts) {
-        if (accId == null || accounts.none { it.id == accId }) accId = accounts.firstOrNull()?.id
+        // Por defecto, la cuenta del sueldo (si hay una marcada); si no, la primera.
+        if (accId == null || accounts.none { it.id == accId }) {
+            accId = accounts.firstOrNull { it.id == Prefs.mainAccountId }?.id ?: accounts.firstOrNull()?.id
+        }
     }
 
     fun press(k: String) {

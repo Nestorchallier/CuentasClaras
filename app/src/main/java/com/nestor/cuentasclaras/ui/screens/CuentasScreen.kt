@@ -12,6 +12,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
@@ -23,6 +25,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.nestor.cuentasclaras.data.Account
 import com.nestor.cuentasclaras.data.Defaults
+import com.nestor.cuentasclaras.data.Recurring
 import com.nestor.cuentasclaras.data.Tx
 import com.nestor.cuentasclaras.data.TxType
 import com.nestor.cuentasclaras.ui.MainViewModel
@@ -31,6 +34,10 @@ import com.nestor.cuentasclaras.ui.theme.C
 import com.nestor.cuentasclaras.util.Balances
 import com.nestor.cuentasclaras.util.Dates
 import com.nestor.cuentasclaras.util.Fmt
+import com.nestor.cuentasclaras.util.Prefs
+import com.nestor.cuentasclaras.util.Projection
+import java.time.LocalDate
+import java.time.YearMonth
 
 @Composable
 fun CuentasScreen(vm: MainViewModel, onSettings: () -> Unit) {
@@ -62,6 +69,9 @@ fun CuentasScreen(vm: MainViewModel, onSettings: () -> Unit) {
                     RoundIcon(Icons.Filled.Add, "Nueva cuenta", Modifier.align(Alignment.TopEnd)) { creating = true }
                 }
             }
+            item {
+                SueldoCard(all, recs, accs.firstOrNull { it.id == Prefs.mainAccountId }, balances)
+            }
             items(accs, key = { it.id }) { a ->
                 Row(
                     Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(C.Card)
@@ -73,7 +83,10 @@ fun CuentasScreen(vm: MainViewModel, onSettings: () -> Unit) {
                     }
                     Spacer(Modifier.width(14.dp))
                     Column {
-                        Text(a.name, color = C.Sub, fontSize = 15.sp)
+                        Text(
+                            if (a.id == Prefs.mainAccountId) "${a.name} · cuenta del sueldo" else a.name,
+                            color = C.Sub, fontSize = 15.sp
+                        )
                         val b = balances[a.id] ?: 0.0
                         Text(Fmt.money(b), color = if (b < 0) C.Red else C.Text, fontSize = 22.sp, fontWeight = FontWeight.Bold)
                     }
@@ -110,8 +123,20 @@ fun CuentasScreen(vm: MainViewModel, onSettings: () -> Unit) {
             usage = if (e == null) 0 else all.count { it.accountId == e.id || it.toAccountId == e.id } + recs.count { it.accountId == e.id },
             targets = accs.filter { it.id != e?.id },
             onDismiss = { creating = false; editing = null },
-            onSave = { a -> vm.launch { vm.repo.saveAccount(a.copy(position = if (a.id == 0L) accs.size else a.position)) }; creating = false; editing = null },
-            onDelete = { a, moveTo -> vm.launch { vm.repo.deleteAccount(a, moveTo) }; editing = null }
+            isMain = e != null && e.id == Prefs.mainAccountId,
+            onSave = { a, main ->
+                vm.launch {
+                    val id = vm.repo.saveAccount(a.copy(position = if (a.id == 0L) accs.size else a.position))
+                    if (main) Prefs.mainAccountId = id
+                    else if (id == Prefs.mainAccountId) Prefs.mainAccountId = -1L
+                }
+                creating = false; editing = null
+            },
+            onDelete = { a, moveTo ->
+                if (a.id == Prefs.mainAccountId) Prefs.mainAccountId = moveTo ?: -1L
+                vm.launch { vm.repo.deleteAccount(a, moveTo) }
+                editing = null
+            }
         )
     }
 
@@ -151,9 +176,11 @@ private fun TransferRow(t: Tx, from: Account?, to: Account?, onClick: () -> Unit
 
 @Composable
 fun AccountDialog(
-    initial: Account?, usage: Int, targets: List<Account>,
-    onDismiss: () -> Unit, onSave: (Account) -> Unit, onDelete: (account: Account, moveTo: Long?) -> Unit
+    initial: Account?, usage: Int, targets: List<Account>, isMain: Boolean,
+    onDismiss: () -> Unit, onSave: (account: Account, isMain: Boolean) -> Unit,
+    onDelete: (account: Account, moveTo: Long?) -> Unit
 ) {
+    var main by remember { mutableStateOf(isMain) }
     var name by remember { mutableStateOf(initial?.name ?: "") }
     var emoji by remember { mutableStateOf(initial?.emoji ?: "🏦") }
     var balance by remember { mutableStateOf(initial?.initialBalance?.let { Fmt.plain(it) } ?: "") }
@@ -170,6 +197,13 @@ fun AccountDialog(
                 EmojiPicker(emoji, Defaults.accountEmojis) { emoji = it }
                 Field(name, { name = it }, "Nombre (ej: Sueldo Cash Market)")
                 Field(balance, { balance = it }, "Saldo inicial", number = true)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Cuenta del sueldo", color = C.Text, fontSize = 15.sp)
+                        Text("Acá entra el sueldo y de acá salen los gastos por defecto.", color = C.Sub, fontSize = 12.sp)
+                    }
+                    Switch(main, { main = it }, colors = SwitchDefaults.colors(checkedTrackColor = C.Green, checkedThumbColor = C.Text))
+                }
                 if (confirmDelete) {
                     when {
                         usage == 0 ->
@@ -189,7 +223,7 @@ fun AccountDialog(
             TextButton(onClick = {
                 if (name.isNotBlank()) {
                     val base = initial ?: Account(name = "", emoji = "")
-                    onSave(base.copy(name = name.trim(), emoji = emoji.ifBlank { "🏦" }, initialBalance = Fmt.parse(balance)))
+                    onSave(base.copy(name = name.trim(), emoji = emoji.ifBlank { "🏦" }, initialBalance = Fmt.parse(balance)), main)
                 }
             }) { Text("Guardar", color = C.Teal) }
         },
@@ -205,4 +239,49 @@ fun AccountDialog(
             }
         }
     )
+}
+
+/**
+ * "Este mes" de la cuenta del sueldo: cuánto entró, cuánto se gastó, cuánto falta de gastos fijos
+ * y cuánto queda libre por día hasta fin de mes. Sin cuenta del sueldo marcada, suma todas las cuentas.
+ */
+@Composable
+private fun SueldoCard(all: List<Tx>, recs: List<Recurring>, main: Account?, balances: Map<Long, Double>) {
+    val ym = YearMonth.now()
+    fun mine(accountId: Long) = main == null || accountId == main.id
+    val month = Dates.inMonth(all, ym)
+    val cobrado = month.filter { it.type == TxType.INGRESO && mine(it.accountId) }.sumOf { it.amount }
+    val gastado = month.filter { it.type == TxType.GASTO && mine(it.accountId) }.sumOf { it.amount }
+    // Recurrentes de gasto que todavía no se generaron este mes (alquiler, servicios, etc.)
+    val fijos = Projection.recurrings(ym, recs).filter { it.type == TxType.GASTO && mine(it.accountId) }.sumOf { it.amount }
+    val libre = cobrado - gastado - fijos
+    val diasRestantes = ym.lengthOfMonth() - LocalDate.now().dayOfMonth + 1
+    CardBox {
+        Text(if (main != null) "${main.emoji} ${main.name} · este mes" else "Este mes · todas las cuentas", color = C.Sub, fontSize = 14.sp)
+        Spacer(Modifier.height(6.dp))
+        Text("Te queda", color = C.Sub, fontSize = 13.sp)
+        Text(Fmt.money(libre), color = if (libre < 0) C.Red else C.Green, fontSize = 30.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+        if (cobrado > 0 && libre > 0) {
+            Text("${Fmt.money(libre / diasRestantes)} por día hasta fin de mes", color = C.Sub, fontSize = 13.sp)
+        }
+        Spacer(Modifier.height(10.dp))
+        ProgressBar(if (cobrado > 0) ((gastado + fijos) / cobrado).toFloat() else 0f, if (libre < 0) C.Red else C.Teal)
+        Spacer(Modifier.height(10.dp))
+        SueldoLine("Cobrado (sueldo e ingresos)", Fmt.money(cobrado), C.Green)
+        SueldoLine("Gastado", "− " + Fmt.money(gastado), C.Text)
+        if (fijos > 0) SueldoLine("Gastos fijos por pagar", "− " + Fmt.money(fijos), C.Text)
+        if (main != null) SueldoLine("Saldo actual de la cuenta", Fmt.money(balances[main.id] ?: 0.0), C.Text)
+        if (main == null) {
+            Spacer(Modifier.height(6.dp))
+            Text("Tocá la cuenta donde cobrás y marcala como \"Cuenta del sueldo\" para ver solo esa.", color = C.Sub, fontSize = 12.sp)
+        }
+    }
+}
+
+@Composable
+private fun SueldoLine(label: String, value: String, color: androidx.compose.ui.graphics.Color) {
+    Row(Modifier.fillMaxWidth().padding(vertical = 3.dp)) {
+        Text(label, color = C.Sub, fontSize = 14.sp, modifier = Modifier.weight(1f))
+        Text(value, color = color, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+    }
 }

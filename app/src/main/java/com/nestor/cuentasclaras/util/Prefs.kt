@@ -11,6 +11,7 @@ object Prefs {
     private val _cents = mutableStateOf(false)
     private val _hide = mutableStateOf(false)
     private val _general = mutableStateOf(GeneralCards.DEFAULT)
+    private val _mainAccount = mutableStateOf(-1L)
 
     fun init(context: Context) {
         val p = context.getSharedPreferences("prefs", Context.MODE_PRIVATE)
@@ -18,6 +19,7 @@ object Prefs {
         _currency.value = p.getString("currency", "$") ?: "$"
         _cents.value = p.getBoolean("cents", false)
         _hide.value = p.getBoolean("hide", false)
+        _mainAccount.value = p.getLong("main_account", -1L)
         _general.value = p.getString("general_cards", null)
             ?.split(",")?.filter { it in GeneralCards.ALL.keys }
             ?: GeneralCards.DEFAULT
@@ -34,6 +36,11 @@ object Prefs {
     var hideBalances: Boolean
         get() = _hide.value
         set(v) { _hide.value = v; sp?.edit()?.putBoolean("hide", v)?.apply() }
+
+    /** Cuenta donde entra el sueldo y de donde salen los gastos por defecto (-1 = ninguna). */
+    var mainAccountId: Long
+        get() = _mainAccount.value
+        set(v) { _mainAccount.value = v; sp?.edit()?.putLong("main_account", v)?.apply() }
 
     /** Tarjetas visibles en "General", en orden. */
     var generalCards: List<String>

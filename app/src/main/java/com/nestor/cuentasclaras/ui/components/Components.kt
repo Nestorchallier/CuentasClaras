@@ -342,3 +342,11 @@ fun MonthGrid(month: YearMonth, cell: @Composable RowScope.(LocalDate?) -> Unit)
         }
     }
 }
+
+/** Barra de avance redondeada (presupuestos, sueldo del mes). */
+@Composable
+fun ProgressBar(progress: Float, color: Color) {
+    Box(Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp)).background(C.CardHi)) {
+        Box(Modifier.fillMaxWidth(progress.coerceIn(0f, 1f)).fillMaxHeight().clip(RoundedCornerShape(4.dp)).background(color))
+    }
+}

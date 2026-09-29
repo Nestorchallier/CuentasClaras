@@ -35,7 +35,12 @@ class Repository(private val context: Context, val db: AppDatabase) {
 
     // ---------- Categorías y cuentas ----------
     suspend fun saveCategory(c: Category) { db.categories().upsert(c); changed() }
-    suspend fun saveAccount(a: Account) { db.accounts().upsert(a); changed() }
+    /** Guarda la cuenta y devuelve su id (el nuevo, si se acaba de crear). */
+    suspend fun saveAccount(a: Account): Long {
+        val r = db.accounts().upsert(a)
+        changed()
+        return if (a.id == 0L) r else a.id
+    }
 
     /** Borra la categoría. Si tiene movimientos o recurrentes, se pasan antes a [moveTo] para no dejarlos huérfanos. */
     suspend fun deleteCategory(c: Category, moveTo: Long?) {
