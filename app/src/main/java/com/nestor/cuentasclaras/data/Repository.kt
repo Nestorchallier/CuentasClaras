@@ -2,6 +2,7 @@ package com.nestor.cuentasclaras.data
 
 import android.content.Context
 import androidx.room.withTransaction
+import com.nestor.cuentasclaras.reminders.Alerts
 import com.nestor.cuentasclaras.util.Dates
 import com.nestor.cuentasclaras.util.Fmt
 import com.nestor.cuentasclaras.widget.WidgetUpdater
@@ -30,9 +31,12 @@ class Repository(private val context: Context, val db: AppDatabase) {
 
     // ---------- Movimientos ----------
     suspend fun saveTx(t: Tx) {
+        // Para los avisos (presupuesto, gasto grande, poca plata) se compara antes y después de guardar.
+        val before = if (t.type == TxType.GASTO) db.txs().all() else emptyList()
         if (t.id == 0L && t.installments > 1 && t.installment == 0) saveInstallments(t)
         else db.txs().upsert(t)
         changed()
+        if (t.type == TxType.GASTO) runCatching { Alerts.afterSave(context, db, t, before) }
     }
     suspend fun deleteTx(t: Tx) { db.txs().delete(t); changed() }
 

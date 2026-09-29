@@ -15,6 +15,13 @@ object Prefs {
     private val _remindDue = mutableStateOf(true)
     private val _theme = mutableStateOf("dark")
     private val _remindDaily = mutableStateOf(false)
+    private val _dueHour = mutableStateOf(9)
+    private val _dueDays = mutableStateOf(1)
+    private val _dailyHour = mutableStateOf(21)
+    private val _weekly = mutableStateOf(false)
+    private val _budgetAlerts = mutableStateOf(true)
+    private val _bigExpense = mutableStateOf(0.0)
+    private val _lowBalance = mutableStateOf(0.0)
     private val _backupFolder = mutableStateOf("")
     private val _lastBackup = mutableStateOf("")
 
@@ -28,6 +35,13 @@ object Prefs {
         _remindDue.value = p.getBoolean("remind_due", true)
         _theme.value = p.getString("theme", "dark") ?: "dark"
         _remindDaily.value = p.getBoolean("remind_daily", false)
+        _dueHour.value = p.getInt("due_hour", 9)
+        _dueDays.value = p.getInt("due_days", 1)
+        _dailyHour.value = p.getInt("daily_hour", 21)
+        _weekly.value = p.getBoolean("weekly_summary", false)
+        _budgetAlerts.value = p.getBoolean("budget_alerts", true)
+        _bigExpense.value = p.getString("big_expense", null)?.toDoubleOrNull() ?: 0.0
+        _lowBalance.value = p.getString("low_balance", null)?.toDoubleOrNull() ?: 0.0
         _backupFolder.value = p.getString("backup_folder", "") ?: ""
         _lastBackup.value = p.getString("last_backup", "") ?: ""
         _general.value = p.getString("general_cards", null)
@@ -76,6 +90,41 @@ object Prefs {
     var lastBackup: String
         get() = _lastBackup.value
         set(v) { _lastBackup.value = v; sp?.edit()?.putString("last_backup", v)?.apply() }
+
+    /** Hora del aviso de vencimientos (0-23). */
+    var dueHour: Int
+        get() = _dueHour.value
+        set(v) { _dueHour.value = v; sp?.edit()?.putInt("due_hour", v)?.apply() }
+
+    /** Con cuántos días de anticipación avisar los vencimientos (1 a 3). */
+    var dueDaysBefore: Int
+        get() = _dueDays.value
+        set(v) { _dueDays.value = v; sp?.edit()?.putInt("due_days", v)?.apply() }
+
+    /** Hora del aviso diario (0-23). */
+    var dailyHour: Int
+        get() = _dailyHour.value
+        set(v) { _dailyHour.value = v; sp?.edit()?.putInt("daily_hour", v)?.apply() }
+
+    /** Resumen semanal el domingo a la noche. */
+    var weeklySummary: Boolean
+        get() = _weekly.value
+        set(v) { _weekly.value = v; sp?.edit()?.putBoolean("weekly_summary", v)?.apply() }
+
+    /** Aviso al llegar al 80% y al 100% del presupuesto de una categoría. */
+    var budgetAlerts: Boolean
+        get() = _budgetAlerts.value
+        set(v) { _budgetAlerts.value = v; sp?.edit()?.putBoolean("budget_alerts", v)?.apply() }
+
+    /** Avisar cuando se carga un gasto mayor o igual a este monto en pesos (0 = no avisar). */
+    var bigExpense: Double
+        get() = _bigExpense.value
+        set(v) { _bigExpense.value = v; sp?.edit()?.putString("big_expense", v.toString())?.apply() }
+
+    /** Avisar cuando lo que queda del mes en la cuenta del sueldo baja de este monto (0 = no avisar). */
+    var lowBalance: Double
+        get() = _lowBalance.value
+        set(v) { _lowBalance.value = v; sp?.edit()?.putString("low_balance", v.toString())?.apply() }
 
     /** Si ya se pidió una vez el permiso de notificaciones al abrir la app. */
     var askedNotifications: Boolean
