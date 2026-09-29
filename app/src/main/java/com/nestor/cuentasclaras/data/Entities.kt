@@ -7,6 +7,8 @@ import androidx.room.PrimaryKey
 object TxType {
     const val GASTO = "GASTO"
     const val INGRESO = "INGRESO"
+    /** Pasa plata de [Tx.accountId] a [Tx.toAccountId]. No cuenta como gasto ni como ingreso. */
+    const val TRANSFER = "TRANSFER"
 }
 
 @Entity(tableName = "categories")
@@ -44,8 +46,12 @@ data class Tx(
     val date: Long,
     val note: String = "",
     /** Si fue generado por un gasto recurrente */
-    val recurringId: Long? = null
-)
+    val recurringId: Long? = null,
+    /** Solo en transferencias: cuenta que recibe la plata (categoryId queda en 0). */
+    val toAccountId: Long? = null
+) {
+    val isTransfer: Boolean get() = type == TxType.TRANSFER
+}
 
 @Entity(tableName = "recurrings")
 data class Recurring(

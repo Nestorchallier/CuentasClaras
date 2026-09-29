@@ -34,6 +34,7 @@ import com.nestor.cuentasclaras.ui.MainViewModel
 import com.nestor.cuentasclaras.ui.components.*
 import com.nestor.cuentasclaras.ui.theme.C
 import com.nestor.cuentasclaras.util.Dates
+import com.nestor.cuentasclaras.util.Balances
 import com.nestor.cuentasclaras.util.Fmt
 import com.nestor.cuentasclaras.util.GeneralCards
 import com.nestor.cuentasclaras.util.Prefs
@@ -250,9 +251,8 @@ private fun CategoriasCard(scoped: List<Tx>, cats: List<Category>, month: YearMo
 
 @Composable
 private fun CuentasCard(all: List<Tx>, accs: List<Account>) {
-    val balances = accs.map { a ->
-        a to (a.initialBalance + all.filter { it.accountId == a.id }.sumOf { if (it.type == TxType.INGRESO) it.amount else -it.amount })
-    }
+    val byId = Balances.of(accs, all)
+    val balances = accs.map { a -> a to (byId[a.id] ?: 0.0) }
     CardBox {
         Text("Saldos por cuenta", color = C.Sub, fontSize = 14.sp)
         Text(Fmt.money(balances.sumOf { it.second }), color = C.Text, fontSize = 24.sp, fontWeight = FontWeight.Bold)

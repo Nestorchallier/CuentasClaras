@@ -54,6 +54,7 @@ class Repository(private val context: Context, val db: AppDatabase) {
         db.withTransaction {
             if (moveTo != null && moveTo != a.id) {
                 db.txs().moveAccount(a.id, moveTo)
+                db.txs().moveTransferTarget(a.id, moveTo)
                 db.recurrings().moveAccount(a.id, moveTo)
             }
             db.accounts().delete(a)
@@ -109,16 +110,21 @@ class Repository(private val context: Context, val db: AppDatabase) {
         val cats = db.categories().all().associateBy { it.id }
         val accs = db.accounts().all().associateBy { it.id }
         val fmt = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
-        val sb = StringBuilder("fecha,tipo,monto,categoria,cuenta,nota\n")
+        val sb = StringBuilder("fecha,tipo,monto,categoria,cuenta,nota,cuenta_destino\n")
         db.txs().all().forEach { t ->
             val dt = Instant.ofEpochMilli(t.date).atZone(Dates.zone).toLocalDateTime()
             val row = listOf(
                 fmt.format(dt),
-                if (t.type == TxType.INGRESO) "Ingreso" else "Gasto",
+                when (t.type) {
+                    TxType.INGRESO -> "Ingreso"
+                    TxType.TRANSFER -> "Transferencia"
+                    else -> "Gasto"
+                },
                 BigDecimal.valueOf(t.amount).toPlainString(),
-                cats[t.categoryId]?.name ?: "",
+                if (t.isTransfer) "" else cats[t.categoryId]?.name ?: "",
                 accs[t.accountId]?.name ?: "",
-                t.note
+                t.note,
+                t.toAccountId?.let { accs[it]?.name } ?: ""
             )
             sb.append(row.joinToString(",") { csv(it) }).append('\n')
         }
@@ -147,37 +153,52 @@ class Repository(private val context: Context, val db: AppDatabase) {
         var dup = 0
         var failed = 0
         db.withTransaction {
+            /** Busca la cuenta por nombre o la crea. */
+            suspend fun account(name: String): Long {
+                accs.firstOrNull { it.name.equals(name, true) }?.let { return it.id }
+                val a = Account(name = name, emoji = "🏦", position = accs.size)
+                val created = a.copy(id = db.accounts().upsert(a))
+                accs.add(created)
+                return created.id
+            }
             for (line in lines.drop(1)) {
                 val f = parseCsvLine(line, sep)
                 val date = f.getOrNull(0)?.let { parseDate(it.trim()) }
                 val amount = f.getOrNull(2)?.let { Fmt.parseOrNull(it) }
                 if (f.size < 3 || date == null || amount == null) { failed++; continue }
-                val type = if (f[1].trim().lowercase().startsWith("ing")) TxType.INGRESO else TxType.GASTO
+                val typeText = f[1].trim().lowercase()
+                val type = when {
+                    typeText.startsWith("ing") -> TxType.INGRESO
+                    typeText.startsWith("trans") -> TxType.TRANSFER
+                    else -> TxType.GASTO
+                }
+                val toName = f.getOrElse(6) { "" }.trim()
+                if (type == TxType.TRANSFER && toName.isBlank()) { failed++; continue }
 
-                val catName = f.getOrElse(3) { "" }.trim().ifBlank { "Otros" }
-                var cat = cats.firstOrNull { it.name.equals(catName, true) && it.type == type }
-                if (cat == null) {
-                    val c = Category(
-                        name = catName, emoji = if (type == TxType.GASTO) "📦" else "💵",
-                        color = Defaults.palette[cats.size % Defaults.palette.size], type = type, position = cats.size
-                    )
-                    cat = c.copy(id = db.categories().upsert(c))
-                    cats.add(cat)
+                // Las transferencias no tienen categoría (categoryId = 0).
+                val catId = if (type == TxType.TRANSFER) 0L else {
+                    val catName = f.getOrElse(3) { "" }.trim().ifBlank { "Otros" }
+                    var cat = cats.firstOrNull { it.name.equals(catName, true) && it.type == type }
+                    if (cat == null) {
+                        val c = Category(
+                            name = catName, emoji = if (type == TxType.GASTO) "📦" else "💵",
+                            color = Defaults.palette[cats.size % Defaults.palette.size], type = type, position = cats.size
+                        )
+                        cat = c.copy(id = db.categories().upsert(c))
+                        cats.add(cat)
+                    }
+                    cat.id
                 }
                 val note = f.getOrElse(5) { "" }.trim()
-                val key = dupKey(date, abs(amount), type, cat.id, note)
+                val key = dupKey(date, abs(amount), type, catId, note)
                 val left = existing[key] ?: 0
                 if (left > 0) { existing[key] = left - 1; dup++; continue }
 
-                val accName = f.getOrElse(4) { "" }.trim().ifBlank { "Efectivo" }
-                var acc = accs.firstOrNull { it.name.equals(accName, true) }
-                if (acc == null) {
-                    val a = Account(name = accName, emoji = "🏦", position = accs.size)
-                    acc = a.copy(id = db.accounts().upsert(a))
-                    accs.add(acc)
-                }
+                val accId = account(f.getOrElse(4) { "" }.trim().ifBlank { "Efectivo" })
+                val toId = if (type == TxType.TRANSFER) account(toName) else null
                 db.txs().upsert(
-                    Tx(amount = abs(amount), type = type, categoryId = cat.id, accountId = acc.id, date = date, note = note)
+                    Tx(amount = abs(amount), type = type, categoryId = catId, accountId = accId, date = date,
+                        note = note, toAccountId = toId)
                 )
                 n++
             }

@@ -23,10 +23,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.nestor.cuentasclaras.data.Account
 import com.nestor.cuentasclaras.data.Defaults
+import com.nestor.cuentasclaras.data.Tx
 import com.nestor.cuentasclaras.data.TxType
 import com.nestor.cuentasclaras.ui.MainViewModel
 import com.nestor.cuentasclaras.ui.components.*
 import com.nestor.cuentasclaras.ui.theme.C
+import com.nestor.cuentasclaras.util.Balances
+import com.nestor.cuentasclaras.util.Dates
 import com.nestor.cuentasclaras.util.Fmt
 
 @Composable
@@ -36,12 +39,11 @@ fun CuentasScreen(vm: MainViewModel, onSettings: () -> Unit) {
     val recs by vm.recurrings.collectAsState()
     var editing by remember { mutableStateOf<Account?>(null) }
     var creating by remember { mutableStateOf(false) }
-    val balances = remember(all, accs) {
-        accs.associate { a ->
-            a.id to (a.initialBalance + all.filter { it.accountId == a.id }
-                .sumOf { if (it.type == TxType.INGRESO) it.amount else -it.amount })
-        }
-    }
+    var transferring by remember { mutableStateOf(false) }
+    var editingTransfer by remember { mutableStateOf<Tx?>(null) }
+    val transfers = remember(all) { all.filter { it.isTransfer }.take(10) }
+    val accMap = remember(accs) { accs.associateBy { it.id } }
+    val balances = remember(all, accs) { Balances.of(accs, all) }
     val total = balances.values.sum()
 
     GradientBg(C.TopNeutral) {
@@ -79,9 +81,24 @@ fun CuentasScreen(vm: MainViewModel, onSettings: () -> Unit) {
             }
             item {
                 Text(
-                    "Saldo = saldo inicial + ingresos − gastos de esa cuenta. Tocá una cuenta para editarla.",
+                    "Saldo = saldo inicial + ingresos − gastos ± transferencias de esa cuenta. Tocá una cuenta para editarla.",
                     color = C.Sub, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 4.dp)
                 )
+            }
+            if (accs.size >= 2) {
+                item {
+                    PrimaryButton("⇄  Transferir entre cuentas") { transferring = true }
+                }
+            }
+            if (transfers.isNotEmpty()) {
+                item {
+                    TxGroup("Últimas transferencias", "") {
+                        transfers.forEachIndexed { i, t ->
+                            if (i > 0) RowDivider()
+                            TransferRow(t, accMap[t.accountId], t.toAccountId?.let { accMap[it] }) { editingTransfer = t }
+                        }
+                    }
+                }
             }
         }
     }
@@ -90,12 +107,45 @@ fun CuentasScreen(vm: MainViewModel, onSettings: () -> Unit) {
         val e = editing
         AccountDialog(
             initial = e,
-            usage = if (e == null) 0 else all.count { it.accountId == e.id } + recs.count { it.accountId == e.id },
+            usage = if (e == null) 0 else all.count { it.accountId == e.id || it.toAccountId == e.id } + recs.count { it.accountId == e.id },
             targets = accs.filter { it.id != e?.id },
             onDismiss = { creating = false; editing = null },
             onSave = { a -> vm.launch { vm.repo.saveAccount(a.copy(position = if (a.id == 0L) accs.size else a.position)) }; creating = false; editing = null },
             onDelete = { a, moveTo -> vm.launch { vm.repo.deleteAccount(a, moveTo) }; editing = null }
         )
+    }
+
+    if (transferring || editingTransfer != null) {
+        TransferDialog(
+            initial = editingTransfer,
+            accounts = accs,
+            onDismiss = { transferring = false; editingTransfer = null },
+            onSave = { t -> vm.launch { vm.repo.saveTx(t) }; transferring = false; editingTransfer = null },
+            onDelete = { t -> vm.launch { vm.repo.deleteTx(t) }; editingTransfer = null }
+        )
+    }
+}
+
+@Composable
+private fun TransferRow(t: Tx, from: Account?, to: Account?, onClick: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(Modifier.size(42.dp).clip(RoundedCornerShape(12.dp)).background(C.CardHi), contentAlignment = Alignment.Center) {
+            Text("⇄", color = C.Blue, fontSize = 20.sp)
+        }
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Text(
+                "${from?.emoji ?: ""} ${from?.name ?: "?"} → ${to?.emoji ?: ""} ${to?.name ?: "?"}",
+                color = C.Text, fontSize = 15.sp, maxLines = 1
+            )
+            val sub = listOf(Dates.dayLabel(Dates.localDate(t.date)), t.note).filter { it.isNotBlank() }.joinToString(" · ")
+            Text(sub, color = C.Sub, fontSize = 12.sp, maxLines = 1)
+        }
+        Spacer(Modifier.width(8.dp))
+        Text(Fmt.money(t.amount), color = C.Blue, fontSize = 16.sp, fontWeight = FontWeight.Medium)
     }
 }
 

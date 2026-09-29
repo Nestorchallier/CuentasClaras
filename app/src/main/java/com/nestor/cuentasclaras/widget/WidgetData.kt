@@ -13,6 +13,7 @@ import com.nestor.cuentasclaras.data.Tx
 import com.nestor.cuentasclaras.data.TxType
 import com.nestor.cuentasclaras.repo
 import com.nestor.cuentasclaras.ui.MainActivity
+import com.nestor.cuentasclaras.util.Balances
 import com.nestor.cuentasclaras.util.Dates
 import com.nestor.cuentasclaras.util.Fmt
 import kotlinx.coroutines.flow.Flow
@@ -54,10 +55,12 @@ object WidgetData {
         val nowMs = System.currentTimeMillis()
         val recent = txs.asSequence().filter { it.date <= nowMs }.take(12).map { t ->
             val c = catMap[t.categoryId]
+            val accText = if (t.isTransfer) "${accMap[t.accountId]?.name ?: ""} → ${accMap[t.toAccountId]?.name ?: ""}"
+                else accMap[t.accountId]?.name ?: ""
             RecentItem(
-                emoji = c?.emoji ?: "❔",
-                title = t.note.ifBlank { c?.name ?: "Sin categoría" },
-                subtitle = "${Dates.dayLabel(Dates.localDate(t.date))} · ${accMap[t.accountId]?.name ?: ""}",
+                emoji = if (t.isTransfer) "⇄" else c?.emoji ?: "❔",
+                title = t.note.ifBlank { if (t.isTransfer) "Transferencia" else c?.name ?: "Sin categoría" },
+                subtitle = "${Dates.dayLabel(Dates.localDate(t.date))} · $accText",
                 amount = t.amount,
                 income = t.type == TxType.INGRESO
             )
@@ -68,10 +71,8 @@ object WidgetData {
             CatSlice(c?.emoji ?: "❔", c?.name ?: "Sin categoría", c?.color ?: 0xFF94A3B8, e.value.sumOf { it.amount })
         }.sortedByDescending { it.amount }
 
-        val accounts = accs.map { a ->
-            AccItem(a.emoji, a.name, a.initialBalance + txs.filter { it.accountId == a.id }
-                .sumOf { if (it.type == TxType.INGRESO) it.amount else -it.amount })
-        }
+        val byId = Balances.of(accs, txs)
+        val accounts = accs.map { a -> AccItem(a.emoji, a.name, byId[a.id] ?: 0.0) }
 
         return Snapshot(
             monthName = Fmt.monthName(ym.monthValue),

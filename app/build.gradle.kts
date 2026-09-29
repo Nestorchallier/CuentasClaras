@@ -32,6 +32,11 @@ android {
     buildFeatures { compose = true }
 }
 
+// Room guarda acá el esquema de cada versión de la base (sirve para revisar las migraciones).
+ksp {
+    arg("room.schemaLocation", "$projectDir/schemas")
+}
+
 dependencies {
     val composeBom = platform("androidx.compose:compose-bom:2024.12.01")
     implementation(composeBom)

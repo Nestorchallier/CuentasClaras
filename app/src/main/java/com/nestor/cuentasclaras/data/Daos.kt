@@ -69,6 +69,9 @@ interface TxDao {
     @Query("UPDATE transactions SET accountId = :to WHERE accountId = :from")
     suspend fun moveAccount(from: Long, to: Long)
 
+    @Query("UPDATE transactions SET toAccountId = :to WHERE toAccountId = :from")
+    suspend fun moveTransferTarget(from: Long, to: Long)
+
     @Query("UPDATE transactions SET categoryId = :to WHERE categoryId = :from")
     suspend fun moveCategory(from: Long, to: Long)
 }
