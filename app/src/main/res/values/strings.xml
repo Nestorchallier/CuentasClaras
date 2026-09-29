@@ -1,0 +1,13 @@
+<resources>
+    <string name="app_name">Cuentas Claras</string>
+    <string name="widget_dashboard">Resumen del mes</string>
+    <string name="widget_dashboard_desc">Gastos del mes, gráfico por día y presupuesto disponible</string>
+    <string name="widget_quick">Carga rápida</string>
+    <string name="widget_quick_desc">Botones para registrar un gasto o ingreso en segundos</string>
+    <string name="widget_actividad">Últimos movimientos</string>
+    <string name="widget_actividad_desc">Tus últimos gastos e ingresos y lo gastado en el mes</string>
+    <string name="widget_resumen">Gastos por categoría</string>
+    <string name="widget_resumen_desc">Dona con la distribución de gastos del mes</string>
+    <string name="widget_cuentas">Saldos de cuentas</string>
+    <string name="widget_cuentas_desc">Saldo total y de cada cuenta</string>
+</resources>

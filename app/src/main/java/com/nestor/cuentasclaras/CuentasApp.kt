@@ -1,0 +1,30 @@
+package com.nestor.cuentasclaras
+
+import android.app.Application
+import android.content.Context
+import com.nestor.cuentasclaras.data.AppDatabase
+import com.nestor.cuentasclaras.data.Repository
+import com.nestor.cuentasclaras.util.Prefs
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
+
+class CuentasApp : Application() {
+    lateinit var repo: Repository
+        private set
+    val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    override fun onCreate() {
+        super.onCreate()
+        Prefs.init(this)
+        repo = Repository(this, AppDatabase.get(this))
+        appScope.launch {
+            repo.seedIfEmpty()
+            repo.processRecurrings()
+        }
+    }
+}
+
+/** Acceso rápido al repositorio desde cualquier Context (actividades, widgets). */
+val Context.repo: Repository get() = (applicationContext as CuentasApp).repo

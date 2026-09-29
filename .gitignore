@@ -1,0 +1,25 @@
+# Gradle / build
+.gradle/
+build/
+*/build/
+captures/
+.externalNativeBuild/
+.cxx/
+
+# Android Studio / IntelliJ
+.idea/
+*.iml
+local.properties
+
+# Signing / secretos
+*.jks
+*.keystore
+keystore.properties
+
+# APK / bundles
+*.apk
+*.aab
+
+# SO
+.DS_Store
+Thumbs.db
