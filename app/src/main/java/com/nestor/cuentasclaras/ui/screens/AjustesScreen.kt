@@ -123,7 +123,7 @@ fun AjustesScreen(vm: MainViewModel, onBack: () -> Unit, onCategories: () -> Uni
             }
 
             Text(
-                "Cuentas Claras 1.1 · tus datos se guardan solo en este teléfono. Exportá un CSV cada tanto como respaldo.",
+                "Cuentas Claras 1.2 · tus datos se guardan solo en este teléfono. Exportá un CSV cada tanto como respaldo.",
                 color = C.Sub, fontSize = 12.sp, modifier = Modifier.padding(top = 20.dp, start = 4.dp)
             )
         }
