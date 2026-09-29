@@ -2,6 +2,7 @@ package com.nestor.cuentasclaras
 
 import android.app.Application
 import android.content.Context
+import com.nestor.cuentasclaras.backup.Backup
 import com.nestor.cuentasclaras.data.AppDatabase
 import com.nestor.cuentasclaras.data.Repository
 import com.nestor.cuentasclaras.reminders.Reminders
@@ -21,6 +22,7 @@ class CuentasApp : Application() {
         Prefs.init(this)
         repo = Repository(this, AppDatabase.get(this))
         Reminders.schedule(this)
+        Backup.schedule(this)
         appScope.launch {
             repo.seedIfEmpty()
             repo.processRecurrings()

@@ -19,6 +19,7 @@ import androidx.core.content.FileProvider
 import com.nestor.cuentasclaras.ui.MainViewModel
 import com.nestor.cuentasclaras.ui.components.*
 import com.nestor.cuentasclaras.ui.theme.C
+import com.nestor.cuentasclaras.backup.Backup
 import com.nestor.cuentasclaras.reminders.Reminders
 import com.nestor.cuentasclaras.util.Prefs
 import com.nestor.cuentasclaras.widget.WidgetUpdater
@@ -60,6 +61,31 @@ fun AjustesScreen(vm: MainViewModel, onBack: () -> Unit, onCategories: () -> Uni
     val notifPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { ok ->
         if (!ok) Toast.makeText(ctx, "Sin permiso de notificaciones no se pueden mostrar los recordatorios", Toast.LENGTH_LONG).show()
     }
+    val folderPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+        if (uri != null) {
+            try {
+                // Guardar el permiso para poder escribir ahí aunque se reinicie el teléfono.
+                ctx.contentResolver.takePersistableUriPermission(
+                    uri, Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                )
+                Prefs.backupFolder = uri.toString()
+                Backup.schedule(ctx)
+                scope.launch {
+                    try {
+                        Backup.run(ctx)
+                        Toast.makeText(ctx, "Listo: backup guardado. Se va a repetir cada semana.", Toast.LENGTH_LONG).show()
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        Toast.makeText(ctx, "No se pudo guardar el backup: ${e.message ?: "error desconocido"}", Toast.LENGTH_LONG).show()
+                    }
+                }
+            } catch (e: Exception) {
+                Toast.makeText(ctx, "No se pudo usar esa carpeta: ${e.message ?: "error desconocido"}", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
     fun reminderChanged() {
         Reminders.schedule(ctx)
         if ((Prefs.remindDue || Prefs.remindDaily) && !Reminders.canNotify(ctx) && android.os.Build.VERSION.SDK_INT >= 33) {
@@ -129,6 +155,40 @@ fun AjustesScreen(vm: MainViewModel, onBack: () -> Unit, onCategories: () -> Uni
                 }, trailing = { Chevron() })
                 RowDivider()
                 SettingRow(Icons.Filled.DeleteForever, "Borrar movimientos", onClick = { confirmClear = true }, trailing = { Chevron() })
+            }
+
+            Section("Backup automático") {
+                SettingRow(
+                    Icons.Filled.CloudUpload, "Carpeta del backup semanal",
+                    value = if (Prefs.backupFolder.isBlank()) "Elegir" else "Cambiar",
+                    onClick = { folderPicker.launch(null) }
+                )
+                if (Prefs.backupFolder.isNotBlank()) {
+                    RowDivider()
+                    SettingRow(Icons.Filled.Backup, "Hacer backup ahora", onClick = {
+                        scope.launch {
+                            try {
+                                Backup.run(ctx)
+                                Toast.makeText(ctx, "Backup guardado", Toast.LENGTH_SHORT).show()
+                            } catch (e: CancellationException) {
+                                throw e
+                            } catch (e: Exception) {
+                                Toast.makeText(ctx, "No se pudo guardar el backup: ${e.message ?: "error desconocido"}", Toast.LENGTH_LONG).show()
+                            }
+                        }
+                    }, trailing = { Chevron() })
+                    RowDivider()
+                    SettingRow(Icons.Filled.CloudOff, "Desactivar backup automático", onClick = {
+                        Prefs.backupFolder = ""
+                        Backup.schedule(ctx)
+                    })
+                }
+                Text(
+                    (if (Prefs.lastBackup.isNotBlank()) "Último backup: ${Prefs.lastBackup}.\n" else "") +
+                        "Cada semana se guarda un CSV en esa carpeta. Si elegís una carpeta de Google Drive " +
+                        "(o una que se sincronice con Drive), el backup queda en la nube. Para recuperar: Importar datos (CSV).",
+                    color = C.Sub, fontSize = 13.sp, modifier = Modifier.padding(16.dp)
+                )
             }
 
             Section("Widgets") {

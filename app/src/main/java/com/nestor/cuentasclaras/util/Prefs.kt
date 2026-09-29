@@ -14,6 +14,8 @@ object Prefs {
     private val _mainAccount = mutableStateOf(-1L)
     private val _remindDue = mutableStateOf(true)
     private val _remindDaily = mutableStateOf(false)
+    private val _backupFolder = mutableStateOf("")
+    private val _lastBackup = mutableStateOf("")
 
     fun init(context: Context) {
         val p = context.getSharedPreferences("prefs", Context.MODE_PRIVATE)
@@ -24,6 +26,8 @@ object Prefs {
         _mainAccount.value = p.getLong("main_account", -1L)
         _remindDue.value = p.getBoolean("remind_due", true)
         _remindDaily.value = p.getBoolean("remind_daily", false)
+        _backupFolder.value = p.getString("backup_folder", "") ?: ""
+        _lastBackup.value = p.getString("last_backup", "") ?: ""
         _general.value = p.getString("general_cards", null)
             ?.split(",")?.filter { it in GeneralCards.ALL.keys }
             ?: GeneralCards.DEFAULT
@@ -55,6 +59,16 @@ object Prefs {
     var remindDaily: Boolean
         get() = _remindDaily.value
         set(v) { _remindDaily.value = v; sp?.edit()?.putBoolean("remind_daily", v)?.apply() }
+
+    /** Carpeta (URI de Storage Access Framework) donde va el backup semanal. Vacío = sin backup. */
+    var backupFolder: String
+        get() = _backupFolder.value
+        set(v) { _backupFolder.value = v; sp?.edit()?.putString("backup_folder", v)?.apply() }
+
+    /** Fecha y hora del último backup, para mostrar en Ajustes. */
+    var lastBackup: String
+        get() = _lastBackup.value
+        set(v) { _lastBackup.value = v; sp?.edit()?.putString("last_backup", v)?.apply() }
 
     /** Si ya se pidió una vez el permiso de notificaciones al abrir la app. */
     var askedNotifications: Boolean
