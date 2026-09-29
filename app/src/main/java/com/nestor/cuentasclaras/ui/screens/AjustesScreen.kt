@@ -310,7 +310,7 @@ fun AjustesScreen(vm: MainViewModel, onBack: () -> Unit, onCategories: () -> Uni
                     RowDivider()
                     SettingRow(Icons.Filled.CloudOff, "Desconectar", onClick = { CloudSync.signOut(ctx) })
                     Text(
-                        "En la PC abrí el archivo cuentas-claras-web.html y entrá con el mismo mail y contraseña. " +
+                        "En la PC abrí nestorchallier.github.io/CuentasClaras y entrá con el mismo mail y contraseña. " +
                             "Lo que cargues en la web aparece acá al abrir la app (o solo, cada 15 minutos).",
                         color = C.Sub, fontSize = 13.sp, modifier = Modifier.padding(16.dp)
                     )
