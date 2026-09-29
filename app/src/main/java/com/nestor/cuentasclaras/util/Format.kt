@@ -63,13 +63,42 @@ object Fmt {
         if (v % 1.0 == 0.0) v.toLong().toString()
         else String.format(Locale.US, "%.2f", v).trimEnd('0').trimEnd('.').replace('.', ',')
 
-    /** Acepta "12.500,50", "12500.5", "12500" */
-    fun parse(s: String): Double {
-        val t = s.trim().replace(" ", "")
-        if (t.isEmpty()) return 0.0
-        return if (t.contains(',')) t.replace(".", "").replace(',', '.').toDoubleOrNull() ?: 0.0
-        else if (t.count { it == '.' } > 1) t.replace(".", "").toDoubleOrNull() ?: 0.0
-        else t.toDoubleOrNull() ?: 0.0
+    /** Acepta "12.500,50", "12500.5", "12500", "250.000", "$ 1.500" (0 si no se entiende). */
+    fun parse(s: String): Double = parseOrNull(s) ?: 0.0
+
+    /**
+     * Única función para leer montos escritos por el usuario o importados de un CSV.
+     * - La coma es decimal: "1.500,5" = 1500,5.
+     * - Un punto seguido de exactamente 3 dígitos es separador de miles: "250.000" = 250000.
+     * - Cualquier otro punto es decimal: "1500.5" (así exporta la app) = 1500,5.
+     * - Si hay punto y coma juntos, el último que aparece es el decimal: "1,500.50" = 1500,5.
+     */
+    fun parseOrNull(raw: String): Double? {
+        var t = raw.trim().filter { !it.isWhitespace() && it != '\u00A0' && it != '$' }
+            .removePrefix("US").removePrefix("ARS")
+        if (t.isEmpty()) return null
+        val neg = t.startsWith("-")
+        t = t.removePrefix("-").removePrefix("+")
+        val lastDot = t.lastIndexOf('.')
+        val lastComma = t.lastIndexOf(',')
+        val normalized = when {
+            lastDot >= 0 && lastComma >= 0 -> {
+                val dec = if (lastComma > lastDot) ',' else '.'
+                val thousands = if (dec == ',') '.' else ','
+                t.replace(thousands.toString(), "").replace(dec, '.')
+            }
+            lastComma >= 0 ->
+                if (t.count { it == ',' } > 1) t.replace(",", "") else t.replace(',', '.')
+            lastDot >= 0 -> {
+                val dots = t.count { it == '.' }
+                val afterLast = t.length - lastDot - 1
+                if (dots > 1 || afterLast == 3) t.replace(".", "") else t
+            }
+            else -> t
+        }
+        if (normalized.isEmpty() || !normalized.all { it.isDigit() || it == '.' }) return null
+        val v = normalized.toDoubleOrNull() ?: return null
+        return if (neg) -v else v
     }
 
     fun shortDate(d: LocalDate) = "${d.dayOfMonth}/${d.monthValue}"

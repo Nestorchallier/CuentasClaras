@@ -3,6 +3,7 @@ package com.nestor.cuentasclaras.data
 import android.content.Context
 import androidx.room.withTransaction
 import com.nestor.cuentasclaras.util.Dates
+import com.nestor.cuentasclaras.util.Fmt
 import com.nestor.cuentasclaras.widget.WidgetUpdater
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
@@ -115,7 +116,7 @@ class Repository(private val context: Context, val db: AppDatabase) {
             if (f.size < 3) continue
             val date = parseDate(f[0].trim()) ?: continue
             val type = if (f[1].trim().lowercase().startsWith("ing")) TxType.INGRESO else TxType.GASTO
-            val amount = parseAmount(f[2]) ?: continue
+            val amount = Fmt.parseOrNull(f[2]) ?: continue
 
             val catName = f.getOrElse(3) { "" }.trim().ifBlank { "Otros" }
             var cat = cats.firstOrNull { it.name.equals(catName, true) && it.type == type }
@@ -169,12 +170,6 @@ class Repository(private val context: Context, val db: AppDatabase) {
         }
         out.add(sb.toString())
         return out
-    }
-
-    private fun parseAmount(raw: String): Double? {
-        val s = raw.trim().replace(" ", "").replace("$", "")
-        s.toDoubleOrNull()?.let { return it }
-        return s.replace(".", "").replace(',', '.').toDoubleOrNull()
     }
 
     private fun parseDate(s: String): Long? {
