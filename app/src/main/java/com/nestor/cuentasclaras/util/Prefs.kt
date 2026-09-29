@@ -12,6 +12,8 @@ object Prefs {
     private val _hide = mutableStateOf(false)
     private val _general = mutableStateOf(GeneralCards.DEFAULT)
     private val _mainAccount = mutableStateOf(-1L)
+    private val _remindDue = mutableStateOf(true)
+    private val _remindDaily = mutableStateOf(false)
 
     fun init(context: Context) {
         val p = context.getSharedPreferences("prefs", Context.MODE_PRIVATE)
@@ -20,6 +22,8 @@ object Prefs {
         _cents.value = p.getBoolean("cents", false)
         _hide.value = p.getBoolean("hide", false)
         _mainAccount.value = p.getLong("main_account", -1L)
+        _remindDue.value = p.getBoolean("remind_due", true)
+        _remindDaily.value = p.getBoolean("remind_daily", false)
         _general.value = p.getString("general_cards", null)
             ?.split(",")?.filter { it in GeneralCards.ALL.keys }
             ?: GeneralCards.DEFAULT
@@ -41,6 +45,21 @@ object Prefs {
     var mainAccountId: Long
         get() = _mainAccount.value
         set(v) { _mainAccount.value = v; sp?.edit()?.putLong("main_account", v)?.apply() }
+
+    /** Avisar el día antes de cada vencimiento (recurrentes y tarjetas). */
+    var remindDue: Boolean
+        get() = _remindDue.value
+        set(v) { _remindDue.value = v; sp?.edit()?.putBoolean("remind_due", v)?.apply() }
+
+    /** Aviso diario "¿Cargaste tus gastos de hoy?". */
+    var remindDaily: Boolean
+        get() = _remindDaily.value
+        set(v) { _remindDaily.value = v; sp?.edit()?.putBoolean("remind_daily", v)?.apply() }
+
+    /** Si ya se pidió una vez el permiso de notificaciones al abrir la app. */
+    var askedNotifications: Boolean
+        get() = sp?.getBoolean("asked_notif", false) ?: false
+        set(v) { sp?.edit()?.putBoolean("asked_notif", v)?.apply() }
 
     /** Tarjetas visibles en "General", en orden. */
     var generalCards: List<String>

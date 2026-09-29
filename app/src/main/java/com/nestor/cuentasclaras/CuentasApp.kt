@@ -4,6 +4,7 @@ import android.app.Application
 import android.content.Context
 import com.nestor.cuentasclaras.data.AppDatabase
 import com.nestor.cuentasclaras.data.Repository
+import com.nestor.cuentasclaras.reminders.Reminders
 import com.nestor.cuentasclaras.util.Prefs
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -19,6 +20,7 @@ class CuentasApp : Application() {
         super.onCreate()
         Prefs.init(this)
         repo = Repository(this, AppDatabase.get(this))
+        Reminders.schedule(this)
         appScope.launch {
             repo.seedIfEmpty()
             repo.processRecurrings()

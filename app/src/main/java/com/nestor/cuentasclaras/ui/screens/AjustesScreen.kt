@@ -19,6 +19,7 @@ import androidx.core.content.FileProvider
 import com.nestor.cuentasclaras.ui.MainViewModel
 import com.nestor.cuentasclaras.ui.components.*
 import com.nestor.cuentasclaras.ui.theme.C
+import com.nestor.cuentasclaras.reminders.Reminders
 import com.nestor.cuentasclaras.util.Prefs
 import com.nestor.cuentasclaras.widget.WidgetUpdater
 import kotlinx.coroutines.CancellationException
@@ -56,6 +57,16 @@ fun AjustesScreen(vm: MainViewModel, onBack: () -> Unit, onCategories: () -> Uni
 
     val switchColors = SwitchDefaults.colors(checkedTrackColor = C.Green, checkedThumbColor = C.Text)
 
+    val notifPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { ok ->
+        if (!ok) Toast.makeText(ctx, "Sin permiso de notificaciones no se pueden mostrar los recordatorios", Toast.LENGTH_LONG).show()
+    }
+    fun reminderChanged() {
+        Reminders.schedule(ctx)
+        if ((Prefs.remindDue || Prefs.remindDaily) && !Reminders.canNotify(ctx) && android.os.Build.VERSION.SDK_INT >= 33) {
+            notifPermission.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
+
     GradientBg(C.TopNeutral) {
         Column(
             Modifier.fillMaxSize().statusBarsPadding().verticalScroll(rememberScrollState())
@@ -74,6 +85,16 @@ fun AjustesScreen(vm: MainViewModel, onBack: () -> Unit, onCategories: () -> Uni
                 RowDivider()
                 SettingRow(Icons.Filled.Savings, "Mostrar centavos", trailing = {
                     Switch(Prefs.showCents, { Prefs.showCents = it; scope.launch { WidgetUpdater.refresh(ctx) } }, colors = switchColors)
+                })
+            }
+
+            Section("Recordatorios") {
+                SettingRow(Icons.Filled.NotificationsActive, "Avisarme el día antes de cada vencimiento", trailing = {
+                    Switch(Prefs.remindDue, { Prefs.remindDue = it; reminderChanged() }, colors = switchColors)
+                })
+                RowDivider()
+                SettingRow(Icons.Filled.Edit, "Aviso diario a las 21: ¿cargaste tus gastos?", trailing = {
+                    Switch(Prefs.remindDaily, { Prefs.remindDaily = it; reminderChanged() }, colors = switchColors)
                 })
             }
 

@@ -55,6 +55,9 @@ dependencies {
     // Widgets de pantalla principal
     implementation("androidx.glance:glance-appwidget:1.1.1")
 
+    // Recordatorios en segundo plano
+    implementation("androidx.work:work-runtime-ktx:2.9.1")
+
     // Base de datos local
     implementation("androidx.room:room-runtime:2.6.1")
     implementation("androidx.room:room-ktx:2.6.1")

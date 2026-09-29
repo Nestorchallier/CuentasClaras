@@ -1,6 +1,9 @@
 package com.nestor.cuentasclaras.ui
 
+import android.Manifest
+import android.os.Build
 import android.os.Bundle
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.BackHandler
@@ -32,9 +35,12 @@ import com.nestor.cuentasclaras.ui.components.GradientBg
 import com.nestor.cuentasclaras.ui.screens.*
 import com.nestor.cuentasclaras.ui.theme.AppTheme
 import com.nestor.cuentasclaras.ui.theme.C
+import com.nestor.cuentasclaras.reminders.Reminders
+import com.nestor.cuentasclaras.util.Prefs
 
 class MainActivity : ComponentActivity() {
     private val vm: MainViewModel by viewModels()
+    private val askNotifications = registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -45,6 +51,12 @@ class MainActivity : ComponentActivity() {
         // Los widgets abren la app en una pestaña: cuentasclaras://open/<n>
         val startTab = intent?.data?.takeIf { it.host == "open" }?.lastPathSegment?.toIntOrNull()?.coerceIn(0, 4) ?: 0
         setContent { AppTheme { AppRoot(vm, startTab) } }
+
+        // Recordatorios: en Android 13+ hay que pedir permiso para notificar (una sola vez).
+        if (Build.VERSION.SDK_INT >= 33 && Prefs.remindDue && !Reminders.canNotify(this) && !Prefs.askedNotifications) {
+            Prefs.askedNotifications = true
+            askNotifications.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
     }
 
     override fun onResume() {
