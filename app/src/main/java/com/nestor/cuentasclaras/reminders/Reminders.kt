@@ -104,7 +104,7 @@ object Reminders {
         Build.VERSION.SDK_INT < 33 ||
             ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
 
-    private fun ensureChannels(context: Context) {
+    fun ensureChannels(context: Context) {
         val nm = context.getSystemService(NotificationManager::class.java)
         listOf(
             Channel.DUE to "Vencimientos",

@@ -55,14 +55,17 @@ fun TxEditor(
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
     /** Si el movimiento es una cuota: borra todas las cuotas de esa compra. */
-    onDeleteAll: (() -> Unit)? = null
+    onDeleteAll: (() -> Unit)? = null,
+    /** Valores sugeridos para un movimiento NUEVO (ej. desde un aviso del banco). Id 0 / 0 = sin dato. */
+    prefill: Tx? = null
 ) {
-    var type by remember { mutableStateOf(initial?.type ?: initialType) }
-    var amount by remember { mutableStateOf(initial?.let { Fmt.plain(it.amount) } ?: "") }
-    var catId by remember { mutableStateOf(initial?.categoryId) }
-    var accId by remember { mutableStateOf(initial?.accountId) }
-    var date by remember { mutableStateOf(initial?.let { Dates.localDate(it.date) } ?: LocalDate.now()) }
-    var note by remember { mutableStateOf(initial?.note ?: "") }
+    val seed = initial ?: prefill
+    var type by remember { mutableStateOf(seed?.type ?: initialType) }
+    var amount by remember { mutableStateOf(seed?.amount?.takeIf { it > 0 }?.let { Fmt.plain(it) } ?: "") }
+    var catId by remember { mutableStateOf(seed?.categoryId?.takeIf { it > 0 }) }
+    var accId by remember { mutableStateOf(seed?.accountId?.takeIf { it > 0 }) }
+    var date by remember { mutableStateOf(seed?.let { Dates.localDate(it.date) } ?: LocalDate.now()) }
+    var note by remember { mutableStateOf(seed?.note ?: "") }
     var pickDate by remember { mutableStateOf(false) }
     var cuotas by remember { mutableIntStateOf(1) }
     var askDelete by remember { mutableStateOf(false) }

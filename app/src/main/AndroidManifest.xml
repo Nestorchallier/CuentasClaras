@@ -40,6 +40,17 @@
             android:theme="@style/Theme.CuentasClaras.Translucent"
             android:windowSoftInputMode="adjustResize" />
 
+        <!-- Lee avisos de pagos del banco / Mercado Pago (solo si se activa en Ajustes y se da el permiso) -->
+        <service
+            android:name=".capture.BankNotificationListener"
+            android:exported="true"
+            android:label="Cuentas Claras: avisos de pagos"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
+
         <receiver
             android:name=".widget.DashboardWidgetReceiver"
             android:exported="true"
