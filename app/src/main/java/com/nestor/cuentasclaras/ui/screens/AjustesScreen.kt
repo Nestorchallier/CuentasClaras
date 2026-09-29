@@ -21,6 +21,10 @@ import com.nestor.cuentasclaras.ui.components.*
 import com.nestor.cuentasclaras.ui.theme.C
 import com.nestor.cuentasclaras.backup.Backup
 import com.nestor.cuentasclaras.reminders.Reminders
+import com.nestor.cuentasclaras.sync.CloudSync
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import com.nestor.cuentasclaras.util.Fmt
 import com.nestor.cuentasclaras.util.Prefs
 import com.nestor.cuentasclaras.widget.WidgetUpdater
@@ -36,6 +40,9 @@ fun AjustesScreen(vm: MainViewModel, onBack: () -> Unit, onCategories: () -> Uni
     var confirmClear by remember { mutableStateOf(false) }
     var currencyDialog by remember { mutableStateOf(false) }
     var amountDialog by remember { mutableStateOf<String?>(null) }
+    var syncMail by remember { mutableStateOf("") }
+    var syncPass by remember { mutableStateOf("") }
+    var connecting by remember { mutableStateOf(false) }
 
     val importer = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) scope.launch {
@@ -253,6 +260,63 @@ fun AjustesScreen(vm: MainViewModel, onBack: () -> Unit, onCategories: () -> Uni
                 )
             }
 
+            Section("Página web (ver y cargar desde la PC)") {
+                if (CloudSync.email.value.isBlank()) {
+                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text(
+                            "Conectá la cuenta que creaste en Firebase para ver todo en vivo desde la página web y cargar movimientos desde la PC.",
+                            color = C.Sub, fontSize = 14.sp
+                        )
+                        Field(syncMail, { syncMail = it }, "Mail")
+                        OutlinedTextField(
+                            value = syncPass, onValueChange = { syncPass = it }, label = { Text("Contraseña") },
+                            singleLine = true, modifier = Modifier.fillMaxWidth(),
+                            visualTransformation = PasswordVisualTransformation(),
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password)
+                        )
+                        PrimaryButton(if (connecting) "Conectando…" else "Conectar") {
+                            if (!connecting && syncMail.isNotBlank() && syncPass.isNotBlank()) scope.launch {
+                                connecting = true
+                                try {
+                                    CloudSync.signIn(ctx, syncMail, syncPass)
+                                    syncPass = ""
+                                    Toast.makeText(ctx, "Conectado. Ya podés abrir la página web.", Toast.LENGTH_LONG).show()
+                                } catch (e: CancellationException) {
+                                    throw e
+                                } catch (e: Exception) {
+                                    Toast.makeText(ctx, "No se pudo conectar: revisá mail, contraseña e internet (${e.message})", Toast.LENGTH_LONG).show()
+                                } finally {
+                                    connecting = false
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    SettingRow(Icons.Filled.CloudDone, "Conectado: ${CloudSync.email.value}", value = CloudSync.status.value.ifBlank { null })
+                    RowDivider()
+                    SettingRow(Icons.Filled.Sync, "Sincronizar ahora", onClick = {
+                        scope.launch {
+                            try {
+                                CloudSync.pullInbox(ctx)
+                                CloudSync.push(ctx)
+                                Toast.makeText(ctx, "Sincronizado", Toast.LENGTH_SHORT).show()
+                            } catch (e: CancellationException) {
+                                throw e
+                            } catch (e: Exception) {
+                                Toast.makeText(ctx, "No se pudo sincronizar: ${e.message}", Toast.LENGTH_LONG).show()
+                            }
+                        }
+                    }, trailing = { Chevron() })
+                    RowDivider()
+                    SettingRow(Icons.Filled.CloudOff, "Desconectar", onClick = { CloudSync.signOut(ctx) })
+                    Text(
+                        "En la PC abrí el archivo cuentas-claras-web.html y entrá con el mismo mail y contraseña. " +
+                            "Lo que cargues en la web aparece acá al abrir la app (o solo, cada 15 minutos).",
+                        color = C.Sub, fontSize = 13.sp, modifier = Modifier.padding(16.dp)
+                    )
+                }
+            }
+
             Section("Doble toque atrás del celular") {
                 Text(
                     "Mantené apretado el ícono de Cuentas Claras: aparecen \"Nuevo gasto\" y \"Nuevo ingreso\". " +
@@ -277,7 +341,7 @@ fun AjustesScreen(vm: MainViewModel, onBack: () -> Unit, onCategories: () -> Uni
             }
 
             Text(
-                "Cuentas Claras 1.4 · tus datos se guardan solo en este teléfono. Exportá un CSV cada tanto como respaldo.",
+                "Cuentas Claras 1.5 · tus datos se guardan solo en este teléfono. Exportá un CSV cada tanto como respaldo.",
                 color = C.Sub, fontSize = 12.sp, modifier = Modifier.padding(top = 20.dp, start = 4.dp)
             )
         }

@@ -5,6 +5,7 @@ import androidx.compose.runtime.mutableStateOf
 import com.nestor.cuentasclaras.data.Account
 import com.nestor.cuentasclaras.data.Tx
 import com.nestor.cuentasclaras.data.TxType
+import com.nestor.cuentasclaras.sync.CloudSync
 import com.nestor.cuentasclaras.widget.WidgetUpdater
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -110,7 +111,7 @@ object Money {
             }
             _rates.value = rates + found
             _updated.value = now
-            ctx?.let { WidgetUpdater.refresh(it) }
+            ctx?.let { WidgetUpdater.refresh(it); CloudSync.requestPush(it) }
             true
         } catch (e: Exception) {
             false

@@ -13,8 +13,8 @@ android {
         applicationId = "com.nestor.cuentasclaras"
         minSdk = 26
         targetSdk = 35
-        versionCode = 5
-        versionName = "1.4"
+        versionCode = 6
+        versionName = "1.5"
     }
 
     buildTypes {
@@ -57,6 +57,12 @@ dependencies {
 
     // Recordatorios en segundo plano
     implementation("androidx.work:work-runtime-ktx:2.9.1")
+
+    // Sincronización con la página web (Firebase: login con mail y base Firestore)
+    implementation(platform("com.google.firebase:firebase-bom:33.7.0"))
+    implementation("com.google.firebase:firebase-auth")
+    implementation("com.google.firebase:firebase-firestore")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.9.0")
 
     // Base de datos local
     implementation("androidx.room:room-runtime:2.6.1")

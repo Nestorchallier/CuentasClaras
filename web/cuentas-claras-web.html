@@ -1,0 +1,382 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cuentas Claras</title>
+<!--
+  Página web de Cuentas Claras: muestra en vivo lo que hay en el celular y permite cargar gastos/ingresos.
+  Se abre con doble clic (no hace falta instalar nada). Entrá con el mismo mail y contraseña que en la app.
+  Lo cargado acá queda "pendiente" hasta que la app lo trae (al abrirla o sola cada 15 minutos).
+-->
+<style>
+  :root {
+    --bg: #12171B; --card: #242B31; --cardhi: #323B42; --text: #F1F5F7; --sub: #8C979F;
+    --green: #34D399; --red: #F87171; --teal: #2DD4BF; --blue: #38BDF8; --top: #1C4257;
+  }
+  @media (prefers-color-scheme: light) {
+    :root:not([data-theme="dark"]) {
+      --bg: #F3F5F7; --card: #FFFFFF; --cardhi: #E4E9ED; --text: #12171B; --sub: #5F6B74;
+      --green: #059669; --red: #DC2626; --teal: #0D9488; --blue: #0284C7; --top: #CFE6F3;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: var(--text);
+    background: linear-gradient(180deg, var(--top) 0, var(--bg) 420px) var(--bg); min-height: 100vh;
+  }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 20px 16px 60px; }
+  header { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 18px; }
+  header h1 { font-size: 22px; margin: 0; flex: 1; }
+  .muted { color: var(--sub); font-size: 13px; }
+  .grid { display: grid; grid-template-columns: repeat(12, 1fr); gap: 14px; }
+  .card { background: var(--card); border-radius: 22px; padding: 18px; min-width: 0; }
+  .c4 { grid-column: span 4; } .c6 { grid-column: span 6; } .c8 { grid-column: span 8; } .c12 { grid-column: span 12; }
+  @media (max-width: 900px) { .c4, .c6, .c8 { grid-column: span 12; } }
+  .label { color: var(--sub); font-size: 14px; margin-bottom: 4px; }
+  .big { font-size: 30px; font-weight: 700; }
+  .row { display: flex; align-items: center; gap: 10px; padding: 7px 0; }
+  .row + .row { border-top: 1px solid color-mix(in srgb, var(--bg) 60%, transparent); }
+  .grow { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .emoji { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; font-size: 17px; flex: none; }
+  .pos { color: var(--green); } .neg { color: var(--red); }
+  .bar { height: 8px; border-radius: 4px; background: var(--cardhi); overflow: hidden; }
+  .bar > div { height: 100%; border-radius: 4px; }
+  button, input, select {
+    font: inherit; color: var(--text); background: var(--cardhi); border: 0; border-radius: 12px; padding: 10px 12px;
+  }
+  button { cursor: pointer; }
+  button.primary { background: var(--teal); color: #06231F; font-weight: 600; }
+  .seg { display: inline-flex; background: var(--cardhi); border-radius: 14px; padding: 3px; }
+  .seg button { background: transparent; padding: 7px 14px; }
+  .seg button.on { background: var(--card); }
+  form .fields { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 12px 0; }
+  form .fields .full { grid-column: span 2; }
+  form input, form select { width: 100%; }
+  #login { max-width: 380px; margin: 12vh auto; }
+  #login input { width: 100%; margin: 6px 0; }
+  .pending { opacity: .65; font-style: italic; }
+  svg text { fill: var(--sub); font-size: 11px; }
+  .hidden { display: none !important; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); display: inline-block; margin-right: 6px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- Ingreso -->
+  <div id="login" class="card hidden">
+    <h2 style="margin-top:0">💰 Cuentas Claras</h2>
+    <p class="muted">Entrá con el mismo mail y contraseña que conectaste en la app (Ajustes → Página web).</p>
+    <input id="mail" type="email" placeholder="Mail" autocomplete="username">
+    <input id="pass" type="password" placeholder="Contraseña" autocomplete="current-password">
+    <button id="btnLogin" class="primary" style="width:100%;margin-top:8px">Entrar</button>
+    <p id="loginErr" class="neg" style="font-size:14px"></p>
+  </div>
+
+  <!-- Tablero -->
+  <div id="app" class="hidden">
+    <header>
+      <h1>💰 Cuentas Claras</h1>
+      <span class="muted"><span class="dot"></span><span id="updated">Conectando…</span></span>
+      <button id="prev">‹</button><strong id="monthLabel"></strong><button id="next">›</button>
+      <button id="logout">Salir</button>
+    </header>
+
+    <div class="grid">
+      <div class="card c4">
+        <div class="label">Saldo total</div>
+        <div class="big" id="total">—</div>
+        <div class="muted" id="totalNote"></div>
+      </div>
+      <div class="card c4">
+        <div class="label">Gastos del mes</div>
+        <div class="big" id="gastos">—</div>
+        <div class="muted" id="gastosNote"></div>
+      </div>
+      <div class="card c4">
+        <div class="label">Ingresos del mes</div>
+        <div class="big pos" id="ingresos">—</div>
+        <div class="muted" id="balanceNote"></div>
+      </div>
+
+      <div class="card c8">
+        <div class="label">Gastos por día</div>
+        <svg id="chart" width="100%" height="190" preserveAspectRatio="none"></svg>
+      </div>
+      <div class="card c4">
+        <div class="label">Cargar movimiento</div>
+        <form id="form">
+          <div class="seg" id="typeSeg">
+            <button type="button" data-t="GASTO" class="on">− Gasto</button>
+            <button type="button" data-t="INGRESO">+ Ingreso</button>
+          </div>
+          <div class="fields">
+            <input id="fAmount" class="full" placeholder="Monto (ej. 12.500,50)" inputmode="decimal" required>
+            <select id="fCat" class="full"></select>
+            <select id="fAcc"></select>
+            <input id="fDate" type="date">
+            <input id="fNote" class="full" placeholder="Nota (opcional)">
+          </div>
+          <button class="primary" style="width:100%">Guardar</button>
+          <p id="formMsg" class="muted"></p>
+        </form>
+      </div>
+
+      <div class="card c4">
+        <div class="label">Cuentas</div>
+        <div id="accounts"></div>
+      </div>
+      <div class="card c4">
+        <div class="label">Gastos por categoría</div>
+        <div id="cats"></div>
+      </div>
+      <div class="card c4">
+        <div class="label">Presupuestos del mes</div>
+        <div id="budgets"></div>
+      </div>
+
+      <div class="card c12">
+        <div class="label">Movimientos del mes</div>
+        <div id="txs"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
+import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut }
+  from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
+import { getFirestore, collection, doc, onSnapshot, addDoc }
+  from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+
+// Datos del proyecto de Firebase (no son secretos: la seguridad la dan el login y las reglas de Firestore).
+const firebaseConfig = {
+  apiKey: "AIzaSyAHoD9O08ssJbYRupcN2wT6oC74cu9-IqE",
+  authDomain: "cuentasclaras-55dd0.firebaseapp.com",
+  projectId: "cuentasclaras-55dd0",
+  storageBucket: "cuentasclaras-55dd0.firebasestorage.app",
+  messagingSenderId: "754676898835",
+  appId: "1:754676898835:web:9fb61fa07eeea01ffd33e6"
+};
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+
+const $ = (id) => document.getElementById(id);
+const S = { accounts: [], categories: [], txs: [], inbox: [], meta: {}, month: new Date(), type: "GASTO" };
+let unsubs = [];
+
+// ---------- Formato (igual que en la app) ----------
+const nf0 = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 0 });
+const nf2 = new Intl.NumberFormat("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const sym = () => S.meta.currency || "$";
+function money(v, acc) {
+  const usd = acc && acc.currency === "USD";
+  const s = (usd ? nf2 : nf0).format(Math.abs(v));
+  return (v < 0 && /[1-9]/.test(s) ? "-" : "") + (usd ? "US$" : sym()) + " " + s;
+}
+const rate = () => S.meta.usdToArs || 0;
+const accById = (id) => S.accounts.find((a) => a.id === id);
+const catById = (id) => S.categories.find((c) => c.id === id);
+const toArs = (amount, acc) => (acc && acc.currency === "USD" ? amount * rate() : amount);
+const color = (c) => "#" + ((c ?? 0xFF94A3B8) % 0x1000000).toString(16).padStart(6, "0");
+const MONTHS = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[ch]));
+
+/** Misma regla que la app: coma decimal; punto + 3 dígitos = miles; "1500.5" también vale. */
+function parseAmount(raw) {
+  let t = String(raw).replace(/[\s$]/g, "").replace(/^US|^ARS/, "");
+  if (!t) return null;
+  const neg = t.startsWith("-"); t = t.replace(/^[-+]/, "");
+  const d = t.lastIndexOf("."), c = t.lastIndexOf(",");
+  if (d >= 0 && c >= 0) { const dec = c > d ? "," : "."; t = t.split(dec === "," ? "." : ",").join("").replace(dec, "."); }
+  else if (c >= 0) t = (t.split(",").length > 2) ? t.split(",").join("") : t.replace(",", ".");
+  else if (d >= 0) { if (t.split(".").length > 2 || t.length - d - 1 === 3) t = t.split(".").join(""); }
+  if (!/^[0-9.]+$/.test(t)) return null;
+  const v = parseFloat(t); if (isNaN(v)) return null;
+  return neg ? -v : v;
+}
+
+// ---------- Cálculos ----------
+function balances() {
+  const m = new Map(S.accounts.map((a) => [a.id, a.initialBalance || 0]));
+  for (const t of S.txs) {
+    if (t.type === "INGRESO" && m.has(t.accountId)) m.set(t.accountId, m.get(t.accountId) + t.amount);
+    else if (t.type === "GASTO" && m.has(t.accountId)) m.set(t.accountId, m.get(t.accountId) - t.amount);
+    else if (t.type === "TRANSFER") {
+      if (m.has(t.accountId)) m.set(t.accountId, m.get(t.accountId) - t.amount);
+      if (t.toAccountId != null && m.has(t.toAccountId)) m.set(t.toAccountId, m.get(t.toAccountId) + (t.toAmount ?? t.amount));
+    }
+  }
+  return m;
+}
+function monthRange() {
+  const y = S.month.getFullYear(), mo = S.month.getMonth();
+  return [new Date(y, mo, 1).getTime(), new Date(y, mo + 1, 1).getTime(), new Date(y, mo + 1, 0).getDate()];
+}
+
+// ---------- Dibujo ----------
+function render() {
+  const [from, to, days] = monthRange();
+  $("monthLabel").textContent = MONTHS[S.month.getMonth()] + " " + S.month.getFullYear();
+
+  const bal = balances();
+  const total = S.accounts.reduce((s, a) => s + toArs(bal.get(a.id) || 0, a), 0);
+  $("total").textContent = money(total);
+  $("total").className = "big " + (total < 0 ? "neg" : "");
+  $("totalNote").textContent = S.accounts.some((a) => a.currency === "USD")
+    ? `En pesos, con el dólar ${S.meta.rateName || ""} (${money(rate())})` : "";
+
+  const month = S.txs.filter((t) => t.date >= from && t.date < to);
+  const ars = (t) => toArs(t.amount, accById(t.accountId));
+  const gastos = month.filter((t) => t.type === "GASTO");
+  const ingresos = month.filter((t) => t.type === "INGRESO");
+  const g = gastos.reduce((s, t) => s + ars(t), 0), i = ingresos.reduce((s, t) => s + ars(t), 0);
+  $("gastos").textContent = money(g);
+  $("gastosNote").textContent = `${gastos.length} movimientos`;
+  $("ingresos").textContent = money(i);
+  $("balanceNote").textContent = `Balance del mes: ${money(i - g)}`;
+
+  // Gráfico de barras por día
+  const daily = new Array(days).fill(0);
+  gastos.forEach((t) => { daily[new Date(t.date).getDate() - 1] += ars(t); });
+  const max = Math.max(1, ...daily), W = 1000, H = 170, slot = W / days, bw = slot * 0.6;
+  const today = new Date(), isThisMonth = today.getFullYear() === S.month.getFullYear() && today.getMonth() === S.month.getMonth();
+  const svg = $("chart"); svg.setAttribute("viewBox", `0 0 ${W} 190`);
+  svg.innerHTML = daily.map((v, k) => {
+    const x = k * slot + (slot - bw) / 2, h = v > 0 ? Math.max(bw, (v / max) * H) : 0;
+    const fill = isThisMonth && k === today.getDate() - 1 ? "var(--teal)" : "var(--text)";
+    return `<rect x="${x}" y="0" width="${bw}" height="${H}" rx="${bw / 2}" fill="var(--cardhi)" opacity=".5"/>` +
+      (h ? `<rect x="${x}" y="${H - h}" width="${bw}" height="${h}" rx="${bw / 2}" fill="${fill}"><title>Día ${k + 1}: ${money(v)}</title></rect>` : "") +
+      ((k + 1) % 5 === 0 || k === 0 ? `<text x="${x + bw / 2}" y="186" text-anchor="middle">${k + 1}</text>` : "");
+  }).join("");
+
+  // Cuentas
+  $("accounts").innerHTML = S.accounts.map((a) => {
+    const b = bal.get(a.id) || 0;
+    const main = a.id === S.meta.mainAccountId ? ' <span class="muted">· sueldo</span>' : "";
+    const conv = a.currency === "USD" && rate() ? `<div class="muted">≈ ${money(toArs(b, a))}</div>` : "";
+    return `<div class="row"><div class="emoji" style="background:var(--cardhi)">${esc(a.emoji)}</div>
+      <div class="grow">${esc(a.name)}${main}</div><div style="text-align:right"><div class="${b < 0 ? "neg" : ""}">${money(b, a)}</div>${conv}</div></div>`;
+  }).join("") || '<p class="muted">Sin cuentas todavía.</p>';
+
+  // Gastos por categoría
+  const byCat = new Map();
+  gastos.forEach((t) => byCat.set(t.categoryId, (byCat.get(t.categoryId) || 0) + ars(t)));
+  const rows = [...byCat.entries()].sort((a, b) => b[1] - a[1]);
+  $("cats").innerHTML = rows.map(([id, v]) => {
+    const c = catById(id) || { name: "Sin categoría", emoji: "❔" };
+    return `<div class="row" style="display:block"><div style="display:flex;gap:8px"><span>${esc(c.emoji)}</span>
+      <span class="grow">${esc(c.name)}</span><span>${money(v)}</span><span class="muted">${g ? Math.round(v / g * 100) : 0}%</span></div>
+      <div class="bar" style="margin-top:6px"><div style="width:${g ? v / g * 100 : 0}%;background:${color(c.color)}"></div></div></div>`;
+  }).join("") || '<p class="muted">Sin gastos este mes.</p>';
+
+  // Presupuestos
+  const budgeted = S.categories.filter((c) => c.type === "GASTO" && c.budget > 0);
+  $("budgets").innerHTML = budgeted.map((c) => {
+    const v = byCat.get(c.id) || 0, p = v / c.budget;
+    const col = p >= 1 ? "var(--red)" : p >= 0.8 ? "#FACC15" : color(c.color);
+    return `<div class="row" style="display:block"><div style="display:flex;gap:8px"><span>${esc(c.emoji)}</span>
+      <span class="grow">${esc(c.name)}</span><span class="${p >= 1 ? "neg" : ""}">${money(v)} / ${money(c.budget)}</span></div>
+      <div class="bar" style="margin-top:6px"><div style="width:${Math.min(100, p * 100)}%;background:${col}"></div></div></div>`;
+  }).join("") || '<p class="muted">No hay presupuestos cargados (se ponen en la app, en Categorías).</p>';
+
+  // Movimientos del mes (y pendientes cargados desde acá)
+  const pend = S.inbox.map((t) => ({ ...t, pending: true }));
+  const list = [...pend, ...month].sort((a, b) => b.date - a.date);
+  $("txs").innerHTML = list.map((t) => {
+    const acc = accById(t.accountId), c = catById(t.categoryId);
+    const d = new Date(t.date), dd = `${d.getDate()}/${d.getMonth() + 1}`;
+    if (t.type === "TRANSFER") {
+      const toAcc = accById(t.toAccountId);
+      return `<div class="row"><div class="emoji" style="background:var(--cardhi);color:var(--blue)">⇄</div>
+        <div class="grow">${esc(acc?.name)} → ${esc(toAcc?.name)}<div class="muted">${dd}${t.note ? " · " + esc(t.note) : ""}</div></div>
+        <div style="color:var(--blue)">${money(t.amount, acc)}</div></div>`;
+    }
+    const inc = t.type === "INGRESO";
+    return `<div class="row ${t.pending ? "pending" : ""}"><div class="emoji" style="border:2px solid ${color(c?.color)}">${esc(c?.emoji || "❔")}</div>
+      <div class="grow">${esc(t.note || c?.name || "Sin categoría")}
+        <div class="muted">${dd} · ${esc(c?.name || "")} · ${esc(acc?.name || "")}${t.pending ? " · pendiente: se agrega al abrir la app" : ""}</div></div>
+      <div class="${inc ? "pos" : ""}">${inc ? "+" : ""}${money(t.amount, acc)}</div></div>`;
+  }).join("") || '<p class="muted">Sin movimientos este mes.</p>';
+
+  fillForm();
+}
+
+function fillForm() {
+  const cats = S.categories.filter((c) => c.type === S.type);
+  const selCat = $("fCat").value, selAcc = $("fAcc").value;
+  $("fCat").innerHTML = cats.map((c) => `<option value="${c.id}">${esc(c.emoji)} ${esc(c.name)}</option>`).join("");
+  if (cats.some((c) => String(c.id) === selCat)) $("fCat").value = selCat;
+  $("fAcc").innerHTML = S.accounts.map((a) => `<option value="${a.id}">${esc(a.emoji)} ${esc(a.name)}${a.currency === "USD" ? " (US$)" : ""}</option>`).join("");
+  if (selAcc) $("fAcc").value = selAcc;
+  else if (S.meta.mainAccountId && accById(S.meta.mainAccountId)) $("fAcc").value = S.meta.mainAccountId;
+}
+
+// ---------- Datos en vivo ----------
+function listen(uid) {
+  unsubs.forEach((u) => u()); unsubs = [];
+  const base = (name) => collection(db, "users", uid, name);
+  const sortPos = (a, b) => (a.position - b.position) || (a.id - b.id);
+  const onErr = (e) => { $("updated").textContent = "Error: " + e.message + " (revisá las reglas de Firestore)"; };
+  unsubs.push(onSnapshot(base("accounts"), (s) => { S.accounts = s.docs.map((d) => d.data()).sort(sortPos); render(); }, onErr));
+  unsubs.push(onSnapshot(base("categories"), (s) => { S.categories = s.docs.map((d) => d.data()).sort(sortPos); render(); }, onErr));
+  unsubs.push(onSnapshot(base("txs"), (s) => { S.txs = s.docs.map((d) => d.data()); render(); }, onErr));
+  unsubs.push(onSnapshot(base("inbox"), (s) => { S.inbox = s.docs.map((d) => d.data()); render(); }, onErr));
+  unsubs.push(onSnapshot(doc(db, "users", uid, "meta", "info"), (d) => { S.meta = d.data() || {}; render(); }, onErr));
+  unsubs.push(onSnapshot(doc(db, "users", uid), (d) => {
+    const u = d.data()?.updatedAt;
+    $("updated").textContent = u ? "En vivo · el celular sincronizó " + new Date(u).toLocaleString("es-AR") : "En vivo · esperando la primera sincronización del celular";
+  }, onErr));
+}
+
+onAuthStateChanged(auth, (user) => {
+  $("login").classList.toggle("hidden", !!user);
+  $("app").classList.toggle("hidden", !user);
+  if (user) listen(user.uid); else { unsubs.forEach((u) => u()); unsubs = []; }
+});
+
+// ---------- Acciones ----------
+$("btnLogin").onclick = async () => {
+  $("loginErr").textContent = "";
+  try { await signInWithEmailAndPassword(auth, $("mail").value.trim(), $("pass").value); }
+  catch (e) { $("loginErr").textContent = "No se pudo entrar: revisá el mail y la contraseña."; }
+};
+$("pass").addEventListener("keydown", (e) => { if (e.key === "Enter") $("btnLogin").click(); });
+$("logout").onclick = () => signOut(auth);
+$("prev").onclick = () => { S.month = new Date(S.month.getFullYear(), S.month.getMonth() - 1, 1); render(); };
+$("next").onclick = () => { S.month = new Date(S.month.getFullYear(), S.month.getMonth() + 1, 1); render(); };
+document.querySelectorAll("#typeSeg button").forEach((b) => b.onclick = () => {
+  S.type = b.dataset.t;
+  document.querySelectorAll("#typeSeg button").forEach((x) => x.classList.toggle("on", x === b));
+  fillForm();
+});
+const pad = (n) => String(n).padStart(2, "0");
+const todayStr = () => { const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; };
+$("fDate").value = todayStr();
+
+$("form").onsubmit = async (e) => {
+  e.preventDefault();
+  const amount = parseAmount($("fAmount").value);
+  const categoryId = Number($("fCat").value), accountId = Number($("fAcc").value);
+  if (!amount || amount <= 0) { $("formMsg").textContent = "Ingresá un monto."; return; }
+  if (!categoryId || !accountId) { $("formMsg").textContent = "Elegí categoría y cuenta."; return; }
+  // Fecha elegida a la hora actual si es hoy, o a las 12 si es otro día (igual que la app).
+  const [y, m, d] = $("fDate").value.split("-").map(Number);
+  const now = new Date();
+  const date = $("fDate").value === todayStr() ? now.getTime() : new Date(y, m - 1, d, 12, 0).getTime();
+  try {
+    await addDoc(collection(db, "users", auth.currentUser.uid, "inbox"), {
+      amount: Math.abs(amount), type: S.type, categoryId, accountId, date, note: $("fNote").value.trim(), createdAt: Date.now()
+    });
+    $("fAmount").value = ""; $("fNote").value = ""; $("fDate").value = todayStr();
+    $("formMsg").textContent = "Guardado. Aparece en el celular al abrir la app (o sola en unos minutos).";
+  } catch (err) {
+    $("formMsg").textContent = "No se pudo guardar: " + err.message;
+  }
+};
+</script>
+</body>
+</html>

@@ -6,6 +6,7 @@ import com.nestor.cuentasclaras.backup.Backup
 import com.nestor.cuentasclaras.data.AppDatabase
 import com.nestor.cuentasclaras.data.Repository
 import com.nestor.cuentasclaras.reminders.Reminders
+import com.nestor.cuentasclaras.sync.CloudSync
 import com.nestor.cuentasclaras.util.Money
 import com.nestor.cuentasclaras.util.Prefs
 import kotlinx.coroutines.CoroutineScope
@@ -25,6 +26,7 @@ class CuentasApp : Application() {
         repo = Repository(this, AppDatabase.get(this))
         Reminders.schedule(this)
         Backup.schedule(this)
+        CloudSync.init(this)
         appScope.launch {
             repo.seedIfEmpty()
             repo.processRecurrings()

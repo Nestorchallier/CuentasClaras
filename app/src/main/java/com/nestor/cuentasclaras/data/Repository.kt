@@ -3,6 +3,7 @@ package com.nestor.cuentasclaras.data
 import android.content.Context
 import androidx.room.withTransaction
 import com.nestor.cuentasclaras.reminders.Alerts
+import com.nestor.cuentasclaras.sync.CloudSync
 import com.nestor.cuentasclaras.util.Dates
 import com.nestor.cuentasclaras.util.Fmt
 import com.nestor.cuentasclaras.widget.WidgetUpdater
@@ -22,7 +23,10 @@ import kotlin.math.abs
 
 class Repository(private val context: Context, val db: AppDatabase) {
 
-    private suspend fun changed() = WidgetUpdater.refresh(context)
+    private suspend fun changed() {
+        WidgetUpdater.refresh(context)
+        CloudSync.requestPush(context) // página web (si hay cuenta conectada)
+    }
 
     suspend fun seedIfEmpty() {
         if (db.categories().count() == 0) db.categories().insertAll(Defaults.categories)
