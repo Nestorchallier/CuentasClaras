@@ -4,7 +4,7 @@
 > Antes de cambios grandes, proponé un plan corto y esperá confirmación. Después de cada cambio, compilá (`./gradlew assembleDebug`) y corregí errores antes de dar la tarea por terminada.
 
 ## Qué es
-App Android nativa de finanzas personales (gastos, ingresos, cuentas, presupuestos, recurrentes) con **widgets de pantalla de inicio**. Es de **uso personal** de Nestor (y de algún amigo al que le pase el APK). Versión actual **1.3** (versionCode 4). El objetivo es **mejorarla y agregarle funciones**, no publicarla.
+App Android nativa de finanzas personales (gastos, ingresos, cuentas, presupuestos, recurrentes) con **widgets de pantalla de inicio**. Es de **uso personal** de Nestor (y de algún amigo al que le pase el APK). Versión actual **1.4** (versionCode 5). El objetivo es **mejorarla y agregarle funciones**, no publicarla.
 
 Inspiración visual: la app "Quanto: Gastos y Presupuesto" (estética oscura con degradés, barras redondeadas, dona por categoría). Mantener ese estilo en las pantallas nuevas.
 

@@ -21,6 +21,7 @@ import com.nestor.cuentasclaras.ui.components.*
 import com.nestor.cuentasclaras.ui.theme.C
 import com.nestor.cuentasclaras.backup.Backup
 import com.nestor.cuentasclaras.reminders.Reminders
+import com.nestor.cuentasclaras.util.Fmt
 import com.nestor.cuentasclaras.util.Prefs
 import com.nestor.cuentasclaras.widget.WidgetUpdater
 import kotlinx.coroutines.CancellationException
@@ -34,6 +35,7 @@ fun AjustesScreen(vm: MainViewModel, onBack: () -> Unit, onCategories: () -> Uni
     val scope = rememberCoroutineScope()
     var confirmClear by remember { mutableStateOf(false) }
     var currencyDialog by remember { mutableStateOf(false) }
+    var amountDialog by remember { mutableStateOf<String?>(null) }
 
     val importer = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) scope.launch {
@@ -86,8 +88,8 @@ fun AjustesScreen(vm: MainViewModel, onBack: () -> Unit, onCategories: () -> Uni
         }
     }
 
-    fun reminderChanged() {
-        Reminders.schedule(ctx)
+    fun reminderChanged(hourChanged: Boolean = false) {
+        Reminders.schedule(ctx, changed = hourChanged)
         if ((Prefs.remindDue || Prefs.remindDaily) && !Reminders.canNotify(ctx) && android.os.Build.VERSION.SDK_INT >= 33) {
             notifPermission.launch(android.Manifest.permission.POST_NOTIFICATIONS)
         }
@@ -130,12 +132,57 @@ fun AjustesScreen(vm: MainViewModel, onBack: () -> Unit, onCategories: () -> Uni
             }
 
             Section("Recordatorios") {
-                SettingRow(Icons.Filled.NotificationsActive, "Avisarme el día antes de cada vencimiento", trailing = {
+                SettingRow(Icons.Filled.NotificationsActive, "Avisar vencimientos", trailing = {
                     Switch(Prefs.remindDue, { Prefs.remindDue = it; reminderChanged() }, colors = switchColors)
                 })
+                if (Prefs.remindDue) {
+                    OptionPills("Con cuánta anticipación", listOf(1 to "1 día antes", 2 to "2 días", 3 to "3 días"), Prefs.dueDaysBefore) {
+                        Prefs.dueDaysBefore = it
+                    }
+                    OptionPills("A qué hora", listOf(8, 9, 12, 18, 21).map { it to "$it hs" }, Prefs.dueHour) {
+                        Prefs.dueHour = it; reminderChanged(hourChanged = true)
+                    }
+                }
                 RowDivider()
-                SettingRow(Icons.Filled.Edit, "Aviso diario a las 21: ¿cargaste tus gastos?", trailing = {
+                SettingRow(Icons.Filled.Edit, "Aviso diario: ¿cargaste tus gastos?", trailing = {
                     Switch(Prefs.remindDaily, { Prefs.remindDaily = it; reminderChanged() }, colors = switchColors)
+                })
+                if (Prefs.remindDaily) {
+                    OptionPills("A qué hora", listOf(20, 21, 22, 23).map { it to "$it hs" }, Prefs.dailyHour) {
+                        Prefs.dailyHour = it; reminderChanged(hourChanged = true)
+                    }
+                }
+                RowDivider()
+                SettingRow(Icons.Filled.CalendarMonth, "Resumen semanal (domingo 20 hs)", trailing = {
+                    Switch(Prefs.weeklySummary, { Prefs.weeklySummary = it; reminderChanged() }, colors = switchColors)
+                })
+                RowDivider()
+                SettingRow(Icons.Filled.PieChart, "Presupuesto al 80% y al 100%", trailing = {
+                    Switch(Prefs.budgetAlerts, { Prefs.budgetAlerts = it; reminderChanged() }, colors = switchColors)
+                })
+                RowDivider()
+                SettingRow(
+                    Icons.Filled.Warning, "Gasto grande",
+                    value = if (Prefs.bigExpense > 0) "desde ${Fmt.money(Prefs.bigExpense)}" else "Apagado",
+                    onClick = { amountDialog = "big" }
+                )
+                RowDivider()
+                SettingRow(
+                    Icons.Filled.Savings, "Poca plata en la cuenta del sueldo",
+                    value = if (Prefs.lowBalance > 0) "menos de ${Fmt.money(Prefs.lowBalance)}" else "Apagado",
+                    onClick = { amountDialog = "low" }
+                )
+                RowDivider()
+                SettingRow(Icons.Filled.MusicNote, "Sonido y vibración de cada aviso", onClick = {
+                    Reminders.openSystemSettings(ctx)
+                }, trailing = { Chevron() })
+                RowDivider()
+                SettingRow(Icons.Filled.NotificationsActive, "Probar notificación", onClick = {
+                    if (!Reminders.canNotify(ctx) && android.os.Build.VERSION.SDK_INT >= 33) {
+                        notifPermission.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+                    } else {
+                        Reminders.notify(ctx, 999, "Así se ven los avisos", "Cuentas Claras te va a avisar acá.", tab = 0)
+                    }
                 })
             }
 
@@ -206,6 +253,17 @@ fun AjustesScreen(vm: MainViewModel, onBack: () -> Unit, onCategories: () -> Uni
                 )
             }
 
+            Section("Doble toque atrás del celular") {
+                Text(
+                    "Mantené apretado el ícono de Cuentas Claras: aparecen \"Nuevo gasto\" y \"Nuevo ingreso\". " +
+                        "Esos accesos se pueden usar con un gesto:\n\n" +
+                        "• Con la app gratuita \"Tap, Tap\": Acciones → Doble toque → Abrir acceso directo → Cuentas Claras → Nuevo gasto.\n" +
+                        "• Si tu celular trae el gesto (Xiaomi: Ajustes adicionales → Gestos → Toque posterior), elegí abrir el acceso directo.\n\n" +
+                        "Se abre la hoja para escribir el monto, igual que el widget.",
+                    color = C.Sub, fontSize = 14.sp, modifier = Modifier.padding(16.dp)
+                )
+            }
+
             Section("Widgets") {
                 Text(
                     "Mantené presionada la pantalla de inicio → Widgets → Cuentas Claras.\n\n" +
@@ -219,10 +277,39 @@ fun AjustesScreen(vm: MainViewModel, onBack: () -> Unit, onCategories: () -> Uni
             }
 
             Text(
-                "Cuentas Claras 1.3 · tus datos se guardan solo en este teléfono. Exportá un CSV cada tanto como respaldo.",
+                "Cuentas Claras 1.4 · tus datos se guardan solo en este teléfono. Exportá un CSV cada tanto como respaldo.",
                 color = C.Sub, fontSize = 12.sp, modifier = Modifier.padding(top = 20.dp, start = 4.dp)
             )
         }
+    }
+
+    amountDialog?.let { which ->
+        val big = which == "big"
+        var v by remember { mutableStateOf((if (big) Prefs.bigExpense else Prefs.lowBalance).takeIf { it > 0 }?.let { Fmt.plain(it) } ?: "") }
+        AlertDialog(
+            onDismissRequest = { amountDialog = null },
+            containerColor = C.Card,
+            title = { Text(if (big) "Aviso de gasto grande" else "Aviso de poca plata", color = C.Text) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        if (big) "Te aviso cuando cargues un gasto igual o mayor a este monto (en pesos)."
+                        else "Te aviso cuando lo que te queda del mes en la cuenta del sueldo baje de este monto.",
+                        color = C.Sub, fontSize = 14.sp
+                    )
+                    Field(v, { v = it }, "Monto (vacío = apagado)", number = true)
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val n = Fmt.parse(v).coerceAtLeast(0.0)
+                    if (big) Prefs.bigExpense = n else Prefs.lowBalance = n
+                    amountDialog = null
+                    reminderChanged()
+                }) { Text("Guardar", color = C.Teal) }
+            },
+            dismissButton = { TextButton(onClick = { amountDialog = null }) { Text("Cancelar", color = C.Sub) } }
+        )
     }
 
     if (currencyDialog) {
@@ -265,5 +352,15 @@ fun AjustesScreen(vm: MainViewModel, onBack: () -> Unit, onCategories: () -> Uni
             },
             dismissButton = { TextButton(onClick = { confirmClear = false }) { Text("Cancelar", color = C.Sub) } }
         )
+    }
+}
+
+/** Fila de opciones (pastillas) dentro de una sección de Ajustes. */
+@Composable
+private fun OptionPills(title: String, options: List<Pair<Int, String>>, selected: Int, onSelect: (Int) -> Unit) {
+    Column(Modifier.padding(start = 68.dp, end = 14.dp, bottom = 10.dp)) {
+        Text(title, color = C.Sub, fontSize = 13.sp)
+        Spacer(Modifier.height(6.dp))
+        ChoiceRow(options.map { it.first.toLong() to it.second }, selected.toLong()) { onSelect(it.toInt()) }
     }
 }
