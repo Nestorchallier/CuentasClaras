@@ -1,9 +1,12 @@
 package com.nestor.cuentasclaras.data
 
 import android.content.Context
+import androidx.room.withTransaction
 import com.nestor.cuentasclaras.util.Dates
 import com.nestor.cuentasclaras.widget.WidgetUpdater
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.math.BigDecimal
@@ -36,27 +39,43 @@ class Repository(private val context: Context, val db: AppDatabase) {
     suspend fun deleteAccount(a: Account) { db.accounts().delete(a); changed() }
 
     // ---------- Recurrentes ----------
-    suspend fun saveRecurring(r: Recurring) { db.recurrings().upsert(r); processRecurrings(); changed() }
+    suspend fun saveRecurring(r: Recurring) {
+        recurringLock.withLock {
+            // Si mientras se editaba ya se generó el mes, no perder esa marca (evita duplicar el movimiento).
+            val stored = if (r.id != 0L) db.recurrings().get(r.id)?.lastGenerated.orEmpty() else ""
+            db.recurrings().upsert(if (stored > r.lastGenerated) r.copy(lastGenerated = stored) else r)
+        }
+        processRecurrings()
+        changed()
+    }
     suspend fun deleteRecurring(r: Recurring) { db.recurrings().delete(r); changed() }
+
+    /** Evita que dos llamadas simultáneas (inicio de la app, onResume, guardar recurrente) generen duplicados. */
+    private val recurringLock = Mutex()
 
     /** Genera los movimientos recurrentes del mes actual cuyo día ya llegó. */
     suspend fun processRecurrings() {
-        val today = LocalDate.now()
-        val ym = YearMonth.from(today)
-        val key = ym.toString()
-        var created = 0
-        for (r in db.recurrings().all()) {
-            if (r.lastGenerated == key) continue
-            val day = r.dayOfMonth.coerceIn(1, ym.lengthOfMonth())
-            if (today.dayOfMonth >= day) {
-                db.txs().upsert(
-                    Tx(
-                        amount = r.amount, type = r.type, categoryId = r.categoryId, accountId = r.accountId,
-                        date = Dates.toMillis(ym.atDay(day), LocalTime.of(9, 0)), note = r.name, recurringId = r.id
-                    )
-                )
-                db.recurrings().upsert(r.copy(lastGenerated = key))
-                created++
+        val created = recurringLock.withLock {
+            db.withTransaction {
+                val today = LocalDate.now()
+                val ym = YearMonth.from(today)
+                val key = ym.toString()
+                var n = 0
+                for (r in db.recurrings().all()) {
+                    if (r.lastGenerated == key) continue
+                    val day = r.dayOfMonth.coerceIn(1, ym.lengthOfMonth())
+                    if (today.dayOfMonth >= day) {
+                        db.txs().upsert(
+                            Tx(
+                                amount = r.amount, type = r.type, categoryId = r.categoryId, accountId = r.accountId,
+                                date = Dates.toMillis(ym.atDay(day), LocalTime.of(9, 0)), note = r.name, recurringId = r.id
+                            )
+                        )
+                        db.recurrings().upsert(r.copy(lastGenerated = key))
+                        n++
+                    }
+                }
+                n
             }
         }
         if (created > 0) changed()

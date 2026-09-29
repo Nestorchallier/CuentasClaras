@@ -75,6 +75,9 @@ interface RecurringDao {
     @Query("SELECT * FROM recurrings ORDER BY dayOfMonth, id")
     suspend fun all(): List<Recurring>
 
+    @Query("SELECT * FROM recurrings WHERE id = :id")
+    suspend fun get(id: Long): Recurring?
+
     @Upsert
     suspend fun upsert(item: Recurring): Long
 
