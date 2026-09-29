@@ -341,7 +341,7 @@ fun AjustesScreen(vm: MainViewModel, onBack: () -> Unit, onCategories: () -> Uni
             }
 
             Text(
-                "Cuentas Claras 1.5 · tus datos se guardan solo en este teléfono. Exportá un CSV cada tanto como respaldo.",
+                "Cuentas Claras 1.5 · tus datos se guardan en este teléfono (y en tu cuenta de Firebase si conectaste la página web). Exportá un CSV cada tanto como respaldo.",
                 color = C.Sub, fontSize = 12.sp, modifier = Modifier.padding(top = 20.dp, start = 4.dp)
             )
         }
