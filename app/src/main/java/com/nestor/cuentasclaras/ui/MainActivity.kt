@@ -5,10 +5,8 @@ import android.os.Build
 import android.os.Bundle
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.ComponentActivity
-import androidx.activity.SystemBarStyle
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
-import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -44,10 +42,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge(
-            statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
-            navigationBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT)
-        )
+        C.apply(this)
         // Los widgets abren la app en una pestaña: cuentasclaras://open/<n>
         val startTab = intent?.data?.takeIf { it.host == "open" }?.lastPathSegment?.toIntOrNull()?.coerceIn(0, 4) ?: 0
         setContent { AppTheme { AppRoot(vm, startTab) } }
@@ -102,7 +97,7 @@ fun AppRoot(vm: MainViewModel, startTab: Int = 0) {
                 Box(
                     Modifier.align(Alignment.BottomEnd).navigationBarsPadding()
                         .padding(end = 20.dp, bottom = 96.dp).size(62.dp).clip(CircleShape)
-                        .background(Brush.verticalGradient(listOf(Color.White, Color(0xFFD5DBE0))))
+                        .background(Brush.verticalGradient(listOf(C.FabTop, C.FabBottom)))
                         .clickable { push(Route.Editor(null, vm.typeFilter)) },
                     contentAlignment = Alignment.Center
                 ) { Icon(Icons.Filled.Add, "Nuevo movimiento", tint = C.Bg, modifier = Modifier.size(30.dp)) }

@@ -103,7 +103,7 @@ fun ActividadScreen(
                 Spacer(Modifier.height(16.dp))
                 BarChart(
                     series = listOf(daily),
-                    colors = listOf(Color.White),
+                    colors = listOf(C.Text),
                     labels = (1..days).map { if (it == 1 || it == 8 || it == 15 || it == 22 || it == days) "$it" else "" },
                     avg = if (total > 0) total / elapsed else null,
                     modifier = Modifier.fillMaxWidth().height(210.dp)

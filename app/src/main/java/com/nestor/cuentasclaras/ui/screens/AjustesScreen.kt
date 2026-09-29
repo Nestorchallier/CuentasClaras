@@ -114,6 +114,21 @@ fun AjustesScreen(vm: MainViewModel, onBack: () -> Unit, onCategories: () -> Uni
                 })
             }
 
+            Section("Apariencia") {
+                val themes = listOf("dark" to "Oscuro", "light" to "Claro", "system" to "Como el teléfono")
+                Column(Modifier.padding(horizontal = 14.dp, vertical = 12.dp)) {
+                    Text("Tema", color = C.Text, fontSize = 16.sp)
+                    Spacer(Modifier.height(8.dp))
+                    ChoiceRow(themes.mapIndexed { i, t -> i.toLong() to t.second }, themes.indexOfFirst { it.first == Prefs.theme }.toLong()) { i ->
+                        Prefs.theme = themes[i.toInt()].first
+                        // Volver a abrir la pantalla para aplicar colores y barras del sistema.
+                        (ctx as? android.app.Activity)?.recreate()
+                    }
+                    Spacer(Modifier.height(6.dp))
+                    Text("Los widgets siguen el modo claro/oscuro del teléfono.", color = C.Sub, fontSize = 12.sp)
+                }
+            }
+
             Section("Recordatorios") {
                 SettingRow(Icons.Filled.NotificationsActive, "Avisarme el día antes de cada vencimiento", trailing = {
                     Switch(Prefs.remindDue, { Prefs.remindDue = it; reminderChanged() }, colors = switchColors)

@@ -13,6 +13,7 @@ object Prefs {
     private val _general = mutableStateOf(GeneralCards.DEFAULT)
     private val _mainAccount = mutableStateOf(-1L)
     private val _remindDue = mutableStateOf(true)
+    private val _theme = mutableStateOf("dark")
     private val _remindDaily = mutableStateOf(false)
     private val _backupFolder = mutableStateOf("")
     private val _lastBackup = mutableStateOf("")
@@ -25,6 +26,7 @@ object Prefs {
         _hide.value = p.getBoolean("hide", false)
         _mainAccount.value = p.getLong("main_account", -1L)
         _remindDue.value = p.getBoolean("remind_due", true)
+        _theme.value = p.getString("theme", "dark") ?: "dark"
         _remindDaily.value = p.getBoolean("remind_daily", false)
         _backupFolder.value = p.getString("backup_folder", "") ?: ""
         _lastBackup.value = p.getString("last_backup", "") ?: ""
@@ -49,6 +51,11 @@ object Prefs {
     var mainAccountId: Long
         get() = _mainAccount.value
         set(v) { _mainAccount.value = v; sp?.edit()?.putLong("main_account", v)?.apply() }
+
+    /** Tema: "dark" (oscuro), "light" (claro) o "system" (como el teléfono). */
+    var theme: String
+        get() = _theme.value
+        set(v) { _theme.value = v; sp?.edit()?.putString("theme", v)?.apply() }
 
     /** Avisar el día antes de cada vencimiento (recurrentes y tarjetas). */
     var remindDue: Boolean

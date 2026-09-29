@@ -62,6 +62,9 @@ fun BarChart(
             if (i in 0 until n) onSelect(i)
         }
     } else Modifier
+    // Fondo de cada barra y línea de promedio: siguen el tema (claro/oscuro).
+    val track = C.Text.copy(alpha = 0.05f)
+    val avgLine = C.Text.copy(alpha = 0.75f)
 
     Canvas(modifier.then(tap)) {
         if (n == 0) return@Canvas
@@ -80,7 +83,7 @@ fun BarChart(
             val x0 = i * slot + (slot - totalW) / 2
             series.forEachIndexed { s, values ->
                 val x = x0 + s * (bw + gap)
-                drawRoundRect(Color.White.copy(alpha = 0.04f), Offset(x, 0f), Size(bw, h), CornerRadius(bw / 2))
+                drawRoundRect(track, Offset(x, 0f), Size(bw, h), CornerRadius(bw / 2))
                 val v = values[i]
                 if (v > 0) {
                     val bh = max((v / maxV * h).toFloat(), bw)
@@ -99,7 +102,7 @@ fun BarChart(
         if (avg != null && avg > 0) {
             val y = h - (avg / maxV * h).toFloat()
             drawLine(
-                Color.White.copy(alpha = 0.75f), Offset(0f, y), Offset(w, y), 1.5.dp.toPx(),
+                avgLine, Offset(0f, y), Offset(w, y), 1.5.dp.toPx(),
                 pathEffect = PathEffect.dashPathEffect(floatArrayOf(14f, 10f))
             )
             label(Fmt.compact(avg), w + 6.dp.toPx(), y + 4.dp.toPx(), C.Text, 11f, Paint.Align.LEFT)

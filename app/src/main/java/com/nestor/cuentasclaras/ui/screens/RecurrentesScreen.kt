@@ -36,7 +36,7 @@ fun RecurrentesScreen(vm: MainViewModel, onBack: () -> Unit) {
     var creating by remember { mutableStateOf(false) }
     val monthly = recs.filter { it.type == TxType.GASTO }.sumOf { it.amount }
 
-    GradientBg(Color(0xFF1E3F36)) {
+    GradientBg(C.TopRecurring) {
         LazyColumn(
             Modifier.fillMaxSize().statusBarsPadding(),
             contentPadding = PaddingValues(start = 16.dp, top = 0.dp, end = 16.dp, bottom = 40.dp)

@@ -110,7 +110,7 @@ object WidgetData {
     }
 
     /** Gráfico de barras diario dibujado como imagen (Glance no tiene Canvas). */
-    fun barsBitmap(values: List<Double>, highlight: Int, w: Int = 720, h: Int = 200): Bitmap {
+    fun barsBitmap(values: List<Double>, highlight: Int, w: Int = 720, h: Int = 200, night: Boolean = true): Bitmap {
         val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
         val c = Canvas(bmp)
         val n = values.size.coerceAtLeast(1)
@@ -118,9 +118,9 @@ object WidgetData {
         val slot = w.toFloat() / n
         val bw = slot * 0.6f
         val r = bw / 2
-        val track = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0x14FFFFFF }
-        val bar = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFFF1F5F7.toInt() }
-        val hl = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFF2DD4BF.toInt() }
+        val track = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = if (night) 0x14FFFFFF else 0x14000000 }
+        val bar = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = (if (night) 0xFFF1F5F7 else 0xFF12171B).toInt() }
+        val hl = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = (if (night) 0xFF2DD4BF else 0xFF0D9488).toInt() }
         values.forEachIndexed { i, v ->
             val x = i * slot + (slot - bw) / 2
             c.drawRoundRect(RectF(x, 0f, x + bw, h.toFloat()), r, r, track)
@@ -133,7 +133,7 @@ object WidgetData {
     }
 
     /** Dona por categoría como imagen. */
-    fun donutBitmap(slices: List<CatSlice>, size: Int = 360): Bitmap {
+    fun donutBitmap(slices: List<CatSlice>, size: Int = 360, night: Boolean = true): Bitmap {
         val bmp = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
         val c = Canvas(bmp)
         val sw = size * 0.13f
@@ -141,7 +141,7 @@ object WidgetData {
         val p = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeWidth = sw }
         val total = slices.sumOf { it.amount }
         if (total <= 0) {
-            p.color = 0xFF323B42.toInt()
+            p.color = (if (night) 0xFF323B42 else 0xFFE4E9ED).toInt()
             c.drawArc(rect, 0f, 360f, false, p)
             return bmp
         }

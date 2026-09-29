@@ -66,7 +66,7 @@ fun PresupuestoScreen(vm: MainViewModel, onEditBudgets: () -> Unit, onSettings: 
                 item {
                     RingProgress(
                         progress = (available / totalBudget).toFloat(),
-                        color = if (available >= 0) Color.White else C.Red,
+                        color = if (available >= 0) C.Text else C.Red,
                         modifier = Modifier.fillMaxWidth().height(310.dp).padding(horizontal = 24.dp, vertical = 16.dp)
                     ) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {

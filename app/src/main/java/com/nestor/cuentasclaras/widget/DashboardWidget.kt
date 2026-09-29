@@ -58,10 +58,11 @@ class DashboardWidgetReceiver : GlanceAppWidgetReceiver() {
     override val glanceAppWidget: GlanceAppWidget = DashboardWidget()
 }
 
-private val White = ColorProvider(Color(0xFFF1F5F7))
-private val Sub = ColorProvider(Color(0xFF8C979F))
-private val Green = ColorProvider(Color(0xFF34D399))
-private val Dark = ColorProvider(Color(0xFF12171B))
+// Colores con versión de día y de noche (ver WColors.kt).
+private val White = W.Text
+private val Sub = W.Sub
+private val Green = W.Green
+private val Dark = W.OnButton
 
 @Composable
 private fun DashboardContent(context: Context, s: Snapshot) {
@@ -90,7 +91,7 @@ private fun DashboardContent(context: Context, s: Snapshot) {
 
         if (size.height >= 140.dp) {
             Spacer(GlanceModifier.height(8.dp))
-            val bmp = remember(s) { WidgetData.barsBitmap(s.daily, s.todayIndex) }
+            val bmp = remember(s) { WidgetData.barsBitmap(s.daily, s.todayIndex, night = W.isNight(context)) }
             Image(
                 provider = ImageProvider(bmp),
                 contentDescription = "Gastos por día",
@@ -106,8 +107,8 @@ private fun DashboardContent(context: Context, s: Snapshot) {
             LinearProgressIndicator(
                 progress = (s.gastos / s.budget).toFloat().coerceIn(0f, 1f),
                 modifier = GlanceModifier.fillMaxWidth().height(6.dp),
-                color = ColorProvider(if (s.gastos > s.budget) Color(0xFFF87171) else Color(0xFF2DD4BF)),
-                backgroundColor = ColorProvider(Color(0xFF323B42))
+                color = if (s.gastos > s.budget) W.Red else W.Teal,
+                backgroundColor = W.Track
             )
             Spacer(GlanceModifier.height(6.dp))
         }

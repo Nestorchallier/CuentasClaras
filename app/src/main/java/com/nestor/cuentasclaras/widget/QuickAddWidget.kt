@@ -57,7 +57,7 @@ class QuickAddWidgetReceiver : GlanceAppWidgetReceiver() {
 @Composable
 private fun QuickContent(context: Context, s: Snapshot) {
     val wide = LocalSize.current.width >= 220.dp
-    val dark = ColorProvider(Color(0xFF12171B))
+    val dark = W.OnGreen
     val expense = actionStartActivity(quickAddIntent(context, TxType.GASTO))
     val income = actionStartActivity(quickAddIntent(context, TxType.INGRESO))
     val openApp = actionStartActivity(openAppIntent(context, 0))
@@ -68,10 +68,10 @@ private fun QuickContent(context: Context, s: Snapshot) {
     ) {
         if (wide) {
             Column(GlanceModifier.defaultWeight().padding(start = 8.dp).clickable(openApp)) {
-                Text("Hoy gastaste", style = TextStyle(color = ColorProvider(Color(0xFF8C979F)), fontSize = 12.sp), maxLines = 1)
+                Text("Hoy gastaste", style = TextStyle(color = W.Sub, fontSize = 12.sp), maxLines = 1)
                 Text(
                     Fmt.money(s.hoy),
-                    style = TextStyle(color = ColorProvider(Color(0xFFF1F5F7)), fontSize = 18.sp, fontWeight = FontWeight.Bold),
+                    style = TextStyle(color = W.Text, fontSize = 18.sp, fontWeight = FontWeight.Bold),
                     maxLines = 1
                 )
             }
@@ -81,7 +81,7 @@ private fun QuickContent(context: Context, s: Snapshot) {
                 .fillMaxHeight().background(ImageProvider(R.drawable.widget_btn_white))
                 .padding(horizontal = 16.dp).clickable(expense),
             contentAlignment = Alignment.Center
-        ) { Text("− Gasto", style = TextStyle(color = dark, fontSize = 15.sp, fontWeight = FontWeight.Bold), maxLines = 1) }
+        ) { Text("− Gasto", style = TextStyle(color = W.OnButton, fontSize = 15.sp, fontWeight = FontWeight.Bold), maxLines = 1) }
         Spacer(GlanceModifier.width(8.dp))
         Box(
             (if (wide) GlanceModifier else GlanceModifier.defaultWeight())
