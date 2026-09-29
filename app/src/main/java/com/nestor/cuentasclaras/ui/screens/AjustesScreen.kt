@@ -21,6 +21,7 @@ import com.nestor.cuentasclaras.ui.components.*
 import com.nestor.cuentasclaras.ui.theme.C
 import com.nestor.cuentasclaras.util.Prefs
 import com.nestor.cuentasclaras.widget.WidgetUpdater
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -34,16 +35,22 @@ fun AjustesScreen(vm: MainViewModel, onBack: () -> Unit, onCategories: () -> Uni
 
     val importer = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) scope.launch {
-            val text = withContext(Dispatchers.IO) {
-                ctx.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() } ?: ""
+            try {
+                val text = withContext(Dispatchers.IO) {
+                    ctx.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() } ?: ""
+                }
+                val r = vm.repo.importCsv(text)
+                val msg = buildString {
+                    append("Se importaron ${r.imported} movimientos")
+                    if (r.duplicates > 0) append("\n${r.duplicates} ya estaban cargados (se saltearon)")
+                    if (r.failed > 0) append("\n${r.failed} filas no se pudieron leer")
+                }
+                Toast.makeText(ctx, msg, Toast.LENGTH_LONG).show()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Toast.makeText(ctx, "No se pudo importar el archivo: ${e.message ?: "error desconocido"}", Toast.LENGTH_LONG).show()
             }
-            val r = vm.repo.importCsv(text)
-            val msg = buildString {
-                append("Se importaron ${r.imported} movimientos")
-                if (r.duplicates > 0) append("\n${r.duplicates} ya estaban cargados (se saltearon)")
-                if (r.failed > 0) append("\n${r.failed} filas no se pudieron leer")
-            }
-            Toast.makeText(ctx, msg, Toast.LENGTH_LONG).show()
         }
     }
 
@@ -79,14 +86,20 @@ fun AjustesScreen(vm: MainViewModel, onBack: () -> Unit, onCategories: () -> Uni
             Section("Datos") {
                 SettingRow(Icons.Filled.FileUpload, "Exportar datos (CSV)", onClick = {
                     scope.launch {
-                        val file = vm.repo.exportCsv()
-                        val uri = FileProvider.getUriForFile(ctx, "${ctx.packageName}.fileprovider", file)
-                        val send = Intent(Intent.ACTION_SEND).apply {
-                            type = "text/csv"
-                            putExtra(Intent.EXTRA_STREAM, uri)
-                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        try {
+                            val file = vm.repo.exportCsv()
+                            val uri = FileProvider.getUriForFile(ctx, "${ctx.packageName}.fileprovider", file)
+                            val send = Intent(Intent.ACTION_SEND).apply {
+                                type = "text/csv"
+                                putExtra(Intent.EXTRA_STREAM, uri)
+                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                            }
+                            ctx.startActivity(Intent.createChooser(send, "Exportar movimientos"))
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (e: Exception) {
+                            Toast.makeText(ctx, "No se pudo exportar: ${e.message ?: "error desconocido"}", Toast.LENGTH_LONG).show()
                         }
-                        ctx.startActivity(Intent.createChooser(send, "Exportar movimientos"))
                     }
                 }, trailing = { Chevron() })
                 RowDivider()
@@ -101,7 +114,10 @@ fun AjustesScreen(vm: MainViewModel, onBack: () -> Unit, onCategories: () -> Uni
                 Text(
                     "Mantené presionada la pantalla de inicio → Widgets → Cuentas Claras.\n\n" +
                         "• Carga rápida (4×1): botones para cargar un gasto o un ingreso en segundos.\n" +
-                        "• Resumen del mes (4×2): gastos del mes, gráfico por día y presupuesto disponible.",
+                        "• Resumen del mes (4×2): gastos del mes, gráfico por día y presupuesto disponible.\n" +
+                        "• Últimos movimientos (4×3): tus últimos gastos e ingresos y lo gastado en el mes.\n" +
+                        "• Gastos por categoría (4×2): dona con la distribución de gastos del mes.\n" +
+                        "• Saldos de cuentas (3×2): saldo total y de cada cuenta.",
                     color = C.Sub, fontSize = 14.sp, modifier = Modifier.padding(16.dp)
                 )
             }
