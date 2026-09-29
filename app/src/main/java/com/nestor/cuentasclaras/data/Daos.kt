@@ -65,6 +65,12 @@ interface TxDao {
 
     @Query("DELETE FROM transactions")
     suspend fun clear()
+
+    @Query("UPDATE transactions SET accountId = :to WHERE accountId = :from")
+    suspend fun moveAccount(from: Long, to: Long)
+
+    @Query("UPDATE transactions SET categoryId = :to WHERE categoryId = :from")
+    suspend fun moveCategory(from: Long, to: Long)
 }
 
 @Dao
@@ -83,4 +89,10 @@ interface RecurringDao {
 
     @Delete
     suspend fun delete(item: Recurring)
+
+    @Query("UPDATE recurrings SET accountId = :to WHERE accountId = :from")
+    suspend fun moveAccount(from: Long, to: Long)
+
+    @Query("UPDATE recurrings SET categoryId = :to WHERE categoryId = :from")
+    suspend fun moveCategory(from: Long, to: Long)
 }

@@ -35,9 +35,31 @@ class Repository(private val context: Context, val db: AppDatabase) {
 
     // ---------- Categorías y cuentas ----------
     suspend fun saveCategory(c: Category) { db.categories().upsert(c); changed() }
-    suspend fun deleteCategory(c: Category) { db.categories().delete(c); changed() }
     suspend fun saveAccount(a: Account) { db.accounts().upsert(a); changed() }
-    suspend fun deleteAccount(a: Account) { db.accounts().delete(a); changed() }
+
+    /** Borra la categoría. Si tiene movimientos o recurrentes, se pasan antes a [moveTo] para no dejarlos huérfanos. */
+    suspend fun deleteCategory(c: Category, moveTo: Long?) {
+        db.withTransaction {
+            if (moveTo != null && moveTo != c.id) {
+                db.txs().moveCategory(c.id, moveTo)
+                db.recurrings().moveCategory(c.id, moveTo)
+            }
+            db.categories().delete(c)
+        }
+        changed()
+    }
+
+    /** Borra la cuenta. Si tiene movimientos o recurrentes, se pasan antes a [moveTo] para no dejarlos huérfanos. */
+    suspend fun deleteAccount(a: Account, moveTo: Long?) {
+        db.withTransaction {
+            if (moveTo != null && moveTo != a.id) {
+                db.txs().moveAccount(a.id, moveTo)
+                db.recurrings().moveAccount(a.id, moveTo)
+            }
+            db.accounts().delete(a)
+        }
+        changed()
+    }
 
     // ---------- Recurrentes ----------
     suspend fun saveRecurring(r: Recurring) {

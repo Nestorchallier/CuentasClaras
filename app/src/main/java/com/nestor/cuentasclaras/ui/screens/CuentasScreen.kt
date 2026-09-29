@@ -33,6 +33,7 @@ import com.nestor.cuentasclaras.util.Fmt
 fun CuentasScreen(vm: MainViewModel, onSettings: () -> Unit) {
     val all by vm.txs.collectAsState()
     val accs by vm.accounts.collectAsState()
+    val recs by vm.recurrings.collectAsState()
     var editing by remember { mutableStateOf<Account?>(null) }
     var creating by remember { mutableStateOf(false) }
     val balances = remember(all, accs) {
@@ -86,21 +87,30 @@ fun CuentasScreen(vm: MainViewModel, onSettings: () -> Unit) {
     }
 
     if (creating || editing != null) {
+        val e = editing
         AccountDialog(
-            initial = editing,
+            initial = e,
+            usage = if (e == null) 0 else all.count { it.accountId == e.id } + recs.count { it.accountId == e.id },
+            targets = accs.filter { it.id != e?.id },
             onDismiss = { creating = false; editing = null },
             onSave = { a -> vm.launch { vm.repo.saveAccount(a.copy(position = if (a.id == 0L) accs.size else a.position)) }; creating = false; editing = null },
-            onDelete = { a -> vm.launch { vm.repo.deleteAccount(a) }; editing = null }
+            onDelete = { a, moveTo -> vm.launch { vm.repo.deleteAccount(a, moveTo) }; editing = null }
         )
     }
 }
 
 @Composable
-fun AccountDialog(initial: Account?, onDismiss: () -> Unit, onSave: (Account) -> Unit, onDelete: (Account) -> Unit) {
+fun AccountDialog(
+    initial: Account?, usage: Int, targets: List<Account>,
+    onDismiss: () -> Unit, onSave: (Account) -> Unit, onDelete: (account: Account, moveTo: Long?) -> Unit
+) {
     var name by remember { mutableStateOf(initial?.name ?: "") }
     var emoji by remember { mutableStateOf(initial?.emoji ?: "🏦") }
     var balance by remember { mutableStateOf(initial?.initialBalance?.let { Fmt.plain(it) } ?: "") }
     var confirmDelete by remember { mutableStateOf(false) }
+    var moveTo by remember { mutableStateOf<Long?>(null) }
+    // Si la cuenta tiene movimientos o recurrentes, hay que elegir a qué cuenta pasarlos antes de borrarla.
+    val canDelete = usage == 0 || moveTo != null
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = C.Card,
@@ -111,7 +121,17 @@ fun AccountDialog(initial: Account?, onDismiss: () -> Unit, onSave: (Account) ->
                 Field(name, { name = it }, "Nombre (ej: Sueldo Cash Market)")
                 Field(balance, { balance = it }, "Saldo inicial", number = true)
                 if (confirmDelete) {
-                    Text("¿Seguro? Los movimientos de esta cuenta quedarán sin cuenta asignada. Tocá Eliminar otra vez.", color = C.Red, fontSize = 13.sp)
+                    when {
+                        usage == 0 ->
+                            Text("¿Seguro? La cuenta no tiene movimientos. Tocá Eliminar otra vez.", color = C.Red, fontSize = 13.sp)
+                        targets.isEmpty() ->
+                            Text("No se puede eliminar: es tu única cuenta y tiene $usage movimientos o recurrentes. Creá otra cuenta primero.", color = C.Red, fontSize = 13.sp)
+                        else -> {
+                            Text("Esta cuenta tiene $usage movimientos o recurrentes. ¿A qué cuenta los pasamos?", color = C.Red, fontSize = 13.sp)
+                            ChoiceRow(targets.map { it.id to "${it.emoji} ${it.name}" }, moveTo) { moveTo = it }
+                            if (moveTo != null) Text("Tocá Eliminar otra vez para confirmar.", color = C.Sub, fontSize = 13.sp)
+                        }
+                    }
                 }
             }
         },
@@ -126,7 +146,10 @@ fun AccountDialog(initial: Account?, onDismiss: () -> Unit, onSave: (Account) ->
         dismissButton = {
             Row {
                 if (initial != null) {
-                    TextButton(onClick = { if (confirmDelete) onDelete(initial) else confirmDelete = true }) { Text("Eliminar", color = C.Red) }
+                    TextButton(
+                        onClick = { if (!confirmDelete) confirmDelete = true else if (canDelete) onDelete(initial, moveTo) },
+                        enabled = !confirmDelete || canDelete
+                    ) { Text("Eliminar", color = if (!confirmDelete || canDelete) C.Red else C.Sub) }
                 }
                 TextButton(onClick = onDismiss) { Text("Cancelar", color = C.Sub) }
             }

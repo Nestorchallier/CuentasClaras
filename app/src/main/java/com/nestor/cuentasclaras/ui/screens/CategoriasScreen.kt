@@ -30,6 +30,8 @@ import com.nestor.cuentasclaras.util.Fmt
 @Composable
 fun CategoriasScreen(vm: MainViewModel, onBack: () -> Unit) {
     val cats by vm.categories.collectAsState()
+    val txs by vm.txs.collectAsState()
+    val recs by vm.recurrings.collectAsState()
     var tab by rememberSaveable { mutableIntStateOf(0) }
     val type = if (tab == 0) TxType.GASTO else TxType.INGRESO
     var editing by remember { mutableStateOf<Category?>(null) }
@@ -109,26 +111,35 @@ fun CategoriasScreen(vm: MainViewModel, onBack: () -> Unit) {
     }
 
     if (creating || editing != null) {
+        val e = editing
         CategoryDialog(
-            initial = editing, type = type,
+            initial = e, type = type,
+            usage = if (e == null) 0 else txs.count { it.categoryId == e.id } + recs.count { it.categoryId == e.id },
+            targets = cats.filter { it.id != e?.id && it.type == (e?.type ?: type) },
             onDismiss = { creating = false; editing = null },
             onSave = { c ->
                 vm.launch { vm.repo.saveCategory(if (c.id == 0L) c.copy(position = list.size) else c) }
                 creating = false; editing = null
             },
-            onDelete = { c -> vm.launch { vm.repo.deleteCategory(c) }; editing = null }
+            onDelete = { c, moveTo -> vm.launch { vm.repo.deleteCategory(c, moveTo) }; editing = null }
         )
     }
 }
 
 @Composable
-fun CategoryDialog(initial: Category?, type: String, onDismiss: () -> Unit, onSave: (Category) -> Unit, onDelete: (Category) -> Unit) {
+fun CategoryDialog(
+    initial: Category?, type: String, usage: Int, targets: List<Category>,
+    onDismiss: () -> Unit, onSave: (Category) -> Unit, onDelete: (category: Category, moveTo: Long?) -> Unit
+) {
     val t = initial?.type ?: type
     var name by remember { mutableStateOf(initial?.name ?: "") }
     var emoji by remember { mutableStateOf(initial?.emoji ?: if (t == TxType.GASTO) "📦" else "💵") }
     var color by remember { mutableStateOf(initial?.color ?: Defaults.palette[0]) }
     var budget by remember { mutableStateOf(initial?.budget?.takeIf { it > 0 }?.let { Fmt.plain(it) } ?: "") }
     var confirmDelete by remember { mutableStateOf(false) }
+    var moveTo by remember { mutableStateOf<Long?>(null) }
+    // Si la categoría tiene movimientos o recurrentes, hay que elegir a cuál pasarlos antes de borrarla.
+    val canDelete = usage == 0 || moveTo != null
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = C.Card,
@@ -143,7 +154,17 @@ fun CategoryDialog(initial: Category?, type: String, onDismiss: () -> Unit, onSa
                     Field(budget, { budget = it }, "Presupuesto mensual (opcional)", number = true)
                 }
                 if (confirmDelete) {
-                    Text("Los movimientos de esta categoría quedarán como \"Sin categoría\". Tocá Eliminar otra vez para confirmar.", color = C.Red, fontSize = 13.sp)
+                    when {
+                        usage == 0 ->
+                            Text("¿Seguro? La categoría no tiene movimientos. Tocá Eliminar otra vez.", color = C.Red, fontSize = 13.sp)
+                        targets.isEmpty() ->
+                            Text("No se puede eliminar: es la única categoría de este tipo y tiene $usage movimientos o recurrentes. Creá otra primero.", color = C.Red, fontSize = 13.sp)
+                        else -> {
+                            Text("Esta categoría tiene $usage movimientos o recurrentes. ¿A qué categoría los pasamos?", color = C.Red, fontSize = 13.sp)
+                            ChoiceRow(targets.map { it.id to "${it.emoji} ${it.name}" }, moveTo) { moveTo = it }
+                            if (moveTo != null) Text("Tocá Eliminar otra vez para confirmar.", color = C.Sub, fontSize = 13.sp)
+                        }
+                    }
                 }
             }
         },
@@ -158,7 +179,10 @@ fun CategoryDialog(initial: Category?, type: String, onDismiss: () -> Unit, onSa
         dismissButton = {
             Row {
                 if (initial != null) {
-                    TextButton(onClick = { if (confirmDelete) onDelete(initial) else confirmDelete = true }) { Text("Eliminar", color = C.Red) }
+                    TextButton(
+                        onClick = { if (!confirmDelete) confirmDelete = true else if (canDelete) onDelete(initial, moveTo) },
+                        enabled = !confirmDelete || canDelete
+                    ) { Text("Eliminar", color = if (!confirmDelete || canDelete) C.Red else C.Sub) }
                 }
                 TextButton(onClick = onDismiss) { Text("Cancelar", color = C.Sub) }
             }
