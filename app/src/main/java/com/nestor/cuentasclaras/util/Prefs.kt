@@ -22,6 +22,9 @@ object Prefs {
     private val _budgetAlerts = mutableStateOf(true)
     private val _bigExpense = mutableStateOf(0.0)
     private val _lowBalance = mutableStateOf(0.0)
+    private val _tgToken = mutableStateOf("")
+    private val _tgChat = mutableStateOf(0L)
+    private val _captureBank = mutableStateOf(false)
     private val _backupFolder = mutableStateOf("")
     private val _lastBackup = mutableStateOf("")
 
@@ -42,6 +45,9 @@ object Prefs {
         _budgetAlerts.value = p.getBoolean("budget_alerts", true)
         _bigExpense.value = p.getString("big_expense", null)?.toDoubleOrNull() ?: 0.0
         _lowBalance.value = p.getString("low_balance", null)?.toDoubleOrNull() ?: 0.0
+        _tgToken.value = p.getString("tg_token", "") ?: ""
+        _tgChat.value = p.getLong("tg_chat", 0L)
+        _captureBank.value = p.getBoolean("capture_bank", false)
         _backupFolder.value = p.getString("backup_folder", "") ?: ""
         _lastBackup.value = p.getString("last_backup", "") ?: ""
         _general.value = p.getString("general_cards", null)
@@ -125,6 +131,40 @@ object Prefs {
     var lowBalance: Double
         get() = _lowBalance.value
         set(v) { _lowBalance.value = v; sp?.edit()?.putString("low_balance", v.toString())?.apply() }
+
+    /** Bot de Telegram: token que da @BotFather (vacío = apagado). Queda solo en el teléfono. */
+    var telegramToken: String
+        get() = _tgToken.value
+        set(v) { _tgToken.value = v; sp?.edit()?.putString("tg_token", v)?.apply() }
+
+    /** Chat de Telegram vinculado (0 = todavía no). Solo se aceptan mensajes de este chat. */
+    var telegramChat: Long
+        get() = _tgChat.value
+        set(v) { _tgChat.value = v; sp?.edit()?.putLong("tg_chat", v)?.apply() }
+
+    /** Último mensaje de Telegram ya leído (para no procesarlo dos veces). */
+    var telegramOffset: Long
+        get() = sp?.getLong("tg_offset", 0L) ?: 0L
+        set(v) { sp?.edit()?.putLong("tg_offset", v)?.apply() }
+
+    /** Código de 4 dígitos para vincular el chat (se genera una vez). */
+    val telegramCode: String
+        get() {
+            val p = sp ?: return "0000"
+            return p.getString("tg_code", null) ?: (1000 + java.util.Random().nextInt(9000)).toString().also {
+                p.edit().putString("tg_code", it).apply()
+            }
+        }
+
+    /** Último movimiento cargado desde Telegram (para /deshacer). */
+    var telegramLastTx: Long
+        get() = sp?.getLong("tg_last_tx", 0L) ?: 0L
+        set(v) { sp?.edit()?.putLong("tg_last_tx", v)?.apply() }
+
+    /** Leer avisos de pagos del banco / Mercado Pago y proponer cargarlos. */
+    var captureBank: Boolean
+        get() = _captureBank.value
+        set(v) { _captureBank.value = v; sp?.edit()?.putBoolean("capture_bank", v)?.apply() }
 
     /** Si ya se pidió una vez el permiso de notificaciones al abrir la app. */
     var askedNotifications: Boolean

@@ -22,6 +22,9 @@ import com.nestor.cuentasclaras.ui.theme.C
 import com.nestor.cuentasclaras.backup.Backup
 import com.nestor.cuentasclaras.reminders.Reminders
 import com.nestor.cuentasclaras.sync.CloudSync
+import com.nestor.cuentasclaras.capture.TelegramBot
+import androidx.core.app.NotificationManagerCompat
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -43,6 +46,8 @@ fun AjustesScreen(vm: MainViewModel, onBack: () -> Unit, onCategories: () -> Uni
     var syncMail by remember { mutableStateOf("") }
     var syncPass by remember { mutableStateOf("") }
     var connecting by remember { mutableStateOf(false) }
+    var tgToken by remember { mutableStateOf("") }
+    var tgChecking by remember { mutableStateOf(false) }
 
     val importer = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) scope.launch {
@@ -260,6 +265,78 @@ fun AjustesScreen(vm: MainViewModel, onBack: () -> Unit, onCategories: () -> Uni
                 )
             }
 
+            Section("Bot de Telegram (cargar con un mensaje)") {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    when {
+                        Prefs.telegramToken.isBlank() -> {
+                            Text(
+                                "1. En Telegram buscá @BotFather y mandale /newbot.\n" +
+                                    "2. Elegí un nombre y un usuario que termine en \"bot\" (ej. NestorCuentasBot).\n" +
+                                    "3. Te da un código largo (token). Copialo y pegalo acá:",
+                                color = C.Sub, fontSize = 14.sp
+                            )
+                            Field(tgToken, { tgToken = it.trim() }, "Token del bot")
+                            PrimaryButton(if (tgChecking) "Revisando…" else "Guardar") {
+                                if (!tgChecking && tgToken.isNotBlank()) scope.launch {
+                                    tgChecking = true
+                                    val old = Prefs.telegramToken
+                                    Prefs.telegramToken = tgToken
+                                    val name = TelegramBot.check()
+                                    tgChecking = false
+                                    if (name == null) {
+                                        Prefs.telegramToken = old
+                                        Toast.makeText(ctx, "Ese token no funciona (revisá que esté completo y que haya internet)", Toast.LENGTH_LONG).show()
+                                    } else {
+                                        Prefs.telegramChat = 0L
+                                        Prefs.telegramOffset = 0L
+                                        TelegramBot.schedule(ctx)
+                                        tgToken = ""
+                                        Toast.makeText(ctx, "Bot $name listo", Toast.LENGTH_LONG).show()
+                                    }
+                                }
+                            }
+                        }
+                        Prefs.telegramChat == 0L -> {
+                            Text("Ahora abrí tu bot en Telegram y mandale este código para vincularlo:", color = C.Sub, fontSize = 14.sp)
+                            Text(Prefs.telegramCode, color = C.Text, fontSize = 34.sp, fontWeight = FontWeight.Bold)
+                            Text("Con la app abierta responde al instante.", color = C.Sub, fontSize = 13.sp)
+                        }
+                        else -> {
+                            Text("✅ Bot vinculado. Escribile por ejemplo:", color = C.Text, fontSize = 15.sp)
+                            Text("café 2500 · super 15 mil tarjeta · nafta 20000 ayer · + sueldo 800000\n/saldo · /mes · /deshacer", color = C.Sub, fontSize = 14.sp)
+                            Text("Con la app cerrada, los mensajes se cargan solos cada 15 minutos.", color = C.Sub, fontSize = 13.sp)
+                        }
+                    }
+                    if (Prefs.telegramToken.isNotBlank()) {
+                        TextButton(onClick = {
+                            Prefs.telegramToken = ""
+                            Prefs.telegramChat = 0L
+                            Prefs.telegramOffset = 0L
+                            TelegramBot.schedule(ctx)
+                        }) { Text("Quitar el bot", color = C.Red) }
+                    }
+                }
+            }
+
+            Section("Avisos del banco y Mercado Pago") {
+                val allowed = NotificationManagerCompat.getEnabledListenerPackages(ctx).contains(ctx.packageName)
+                SettingRow(Icons.Filled.AccountBalance, "Proponer cargar mis pagos", trailing = {
+                    Switch(Prefs.captureBank, {
+                        Prefs.captureBank = it
+                        if (it && !allowed) {
+                            Toast.makeText(ctx, "Buscá \"Cuentas Claras\" en la lista y activá el permiso", Toast.LENGTH_LONG).show()
+                            ctx.startActivity(Intent(android.provider.Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+                        }
+                    }, colors = switchColors)
+                })
+                Text(
+                    (if (Prefs.captureBank && !allowed) "⚠️ Falta el permiso \"Acceso a notificaciones\": apagá y prendé el interruptor para abrirlo.\n\n" else "") +
+                        "Cuando te llegue un aviso tipo \"Pagaste \$ 4.500 en Farmacia\", te aparece \"¿Cargar gasto de \$ 4.500?\". " +
+                        "Al tocarlo se abre la carga completa y solo confirmás. Nunca se guarda nada sin que toques Guardar.",
+                    color = C.Sub, fontSize = 13.sp, modifier = Modifier.padding(16.dp)
+                )
+            }
+
             Section("Página web (ver y cargar desde la PC)") {
                 if (CloudSync.email.value.isBlank()) {
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -341,7 +418,7 @@ fun AjustesScreen(vm: MainViewModel, onBack: () -> Unit, onCategories: () -> Uni
             }
 
             Text(
-                "Cuentas Claras 1.5 · tus datos se guardan en este teléfono (y en tu cuenta de Firebase si conectaste la página web). Exportá un CSV cada tanto como respaldo.",
+                "Cuentas Claras 1.6 · tus datos se guardan en este teléfono (y en tu cuenta de Firebase si conectaste la página web). Exportá un CSV cada tanto como respaldo.",
                 color = C.Sub, fontSize = 12.sp, modifier = Modifier.padding(top = 20.dp, start = 4.dp)
             )
         }

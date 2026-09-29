@@ -4,7 +4,7 @@
 > Antes de cambios grandes, proponé un plan corto y esperá confirmación. Después de cada cambio, compilá (`./gradlew assembleDebug`) y corregí errores antes de dar la tarea por terminada.
 
 ## Qué es
-App Android nativa de finanzas personales (gastos, ingresos, cuentas, presupuestos, recurrentes) con **widgets de pantalla de inicio**. Es de **uso personal** de Nestor (y de algún amigo al que le pase el APK). Versión actual **1.5** (versionCode 6). El objetivo es **mejorarla y agregarle funciones**, no publicarla.
+App Android nativa de finanzas personales (gastos, ingresos, cuentas, presupuestos, recurrentes) con **widgets de pantalla de inicio**. Es de **uso personal** de Nestor (y de algún amigo al que le pase el APK). Versión actual **1.6** (versionCode 7). El objetivo es **mejorarla y agregarle funciones**, no publicarla.
 
 Inspiración visual: la app "Quanto: Gastos y Presupuesto" (estética oscura con degradés, barras redondeadas, dona por categoría). Mantener ese estilo en las pantallas nuevas.
 
@@ -28,6 +28,7 @@ Inspiración visual: la app "Quanto: Gastos y Presupuesto" (estética oscura con
 - `util/Balances.kt` (saldos con transferencias, total en pesos), `util/CardCycle.kt` (resúmenes de tarjeta), `util/Money.kt` (cotización dolarapi.com, conversión a pesos).
 - `reminders/Reminders.kt` (WorkManager: vencimientos, aviso diario, resumen semanal; horas en Prefs), `reminders/Alerts.kt` (presupuesto 80/100%, gasto grande, poca plata; se llama desde `saveTx`), `backup/Backup.kt` (CSV semanal a carpeta SAF).
 - `sync/CloudSync.kt` — sube a `users/{uid}/{accounts,categories,txs,meta}` solo lo que cambió (huellas en `sync_state.txt`); trae lo cargado en la web desde `users/{uid}/inbox`. `docs/firestore.rules` = reglas.
+- `capture/` — `QuickText` (entiende "café 2500", "super 15 mil tarjeta": monto, tipo, categoría por palabras clave, cuenta, fecha), `TelegramBot` (bot propio sin servidor: getUpdates con espera larga con la app abierta y WorkManager cada 15 min; token y chat vinculado en Prefs, nunca en el repo), `BankNotificationListener` + `BankText` (lee avisos de pago y propone cargarlos abriendo `QuickAddActivity` con `?amount=&note=`).
 - `ui/MainActivity.kt` — navegación propia: 5 pestañas (0 Actividad, 1 Resumen, 2 Presupuesto, 3 General, 4 Cuentas) + pila de `Route` (Editor, Settings, Categories, Recurrings, CategoryDetail). Deep link desde widgets `cuentasclaras://open/<tab>`.
 - `ui/MainViewModel.kt` — StateFlows de txs/categorías/cuentas/recurrentes + filtros compartidos (mes, tipo, cuenta).
 - `ui/components/` — `Components.kt` (Pill, DropPill, CardBox, EmojiBadge, TxRow, MonthSwitcher, MonthGrid, Field…), `Charts.kt` (BarChart, DonutChart, RingProgress en Canvas).
