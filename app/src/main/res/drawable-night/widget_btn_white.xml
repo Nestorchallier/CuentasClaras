@@ -1,6 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Botón principal de los widgets en modo claro: oscuro sobre fondo blanco (el oscuro está en drawable-night) -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
-    <solid android:color="#FF12171B" />
+    <solid android:color="#FFF1F5F7" />
     <corners android:radius="18dp" />
 </shape>

@@ -19,8 +19,19 @@ import androidx.core.content.FileProvider
 import com.nestor.cuentasclaras.ui.MainViewModel
 import com.nestor.cuentasclaras.ui.components.*
 import com.nestor.cuentasclaras.ui.theme.C
+import com.nestor.cuentasclaras.backup.Backup
+import com.nestor.cuentasclaras.reminders.Reminders
+import com.nestor.cuentasclaras.sync.CloudSync
+import com.nestor.cuentasclaras.capture.TelegramBot
+import androidx.core.app.NotificationManagerCompat
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import com.nestor.cuentasclaras.util.Fmt
 import com.nestor.cuentasclaras.util.Prefs
 import com.nestor.cuentasclaras.widget.WidgetUpdater
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -31,18 +42,70 @@ fun AjustesScreen(vm: MainViewModel, onBack: () -> Unit, onCategories: () -> Uni
     val scope = rememberCoroutineScope()
     var confirmClear by remember { mutableStateOf(false) }
     var currencyDialog by remember { mutableStateOf(false) }
+    var amountDialog by remember { mutableStateOf<String?>(null) }
+    var syncMail by remember { mutableStateOf("") }
+    var syncPass by remember { mutableStateOf("") }
+    var connecting by remember { mutableStateOf(false) }
+    var tgToken by remember { mutableStateOf("") }
+    var tgChecking by remember { mutableStateOf(false) }
 
     val importer = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) scope.launch {
-            val text = withContext(Dispatchers.IO) {
-                ctx.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() } ?: ""
+            try {
+                val text = withContext(Dispatchers.IO) {
+                    ctx.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() } ?: ""
+                }
+                val r = vm.repo.importCsv(text)
+                val msg = buildString {
+                    append("Se importaron ${r.imported} movimientos")
+                    if (r.duplicates > 0) append("\n${r.duplicates} ya estaban cargados (se saltearon)")
+                    if (r.failed > 0) append("\n${r.failed} filas no se pudieron leer")
+                }
+                Toast.makeText(ctx, msg, Toast.LENGTH_LONG).show()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Toast.makeText(ctx, "No se pudo importar el archivo: ${e.message ?: "error desconocido"}", Toast.LENGTH_LONG).show()
             }
-            val n = vm.repo.importCsv(text)
-            Toast.makeText(ctx, "Se importaron $n movimientos", Toast.LENGTH_LONG).show()
         }
     }
 
     val switchColors = SwitchDefaults.colors(checkedTrackColor = C.Green, checkedThumbColor = C.Text)
+
+    val notifPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { ok ->
+        if (!ok) Toast.makeText(ctx, "Sin permiso de notificaciones no se pueden mostrar los recordatorios", Toast.LENGTH_LONG).show()
+    }
+    val folderPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+        if (uri != null) {
+            try {
+                // Guardar el permiso para poder escribir ahí aunque se reinicie el teléfono.
+                ctx.contentResolver.takePersistableUriPermission(
+                    uri, Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                )
+                Prefs.backupFolder = uri.toString()
+                Backup.schedule(ctx)
+                scope.launch {
+                    try {
+                        Backup.run(ctx)
+                        Toast.makeText(ctx, "Listo: backup guardado. Se va a repetir cada semana.", Toast.LENGTH_LONG).show()
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        Toast.makeText(ctx, "No se pudo guardar el backup: ${e.message ?: "error desconocido"}", Toast.LENGTH_LONG).show()
+                    }
+                }
+            } catch (e: Exception) {
+                Toast.makeText(ctx, "No se pudo usar esa carpeta: ${e.message ?: "error desconocido"}", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
+    fun reminderChanged(hourChanged: Boolean = false) {
+        Reminders.schedule(ctx, changed = hourChanged)
+        if ((Prefs.remindDue || Prefs.remindDaily) && !Reminders.canNotify(ctx) && android.os.Build.VERSION.SDK_INT >= 33) {
+            notifPermission.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
 
     GradientBg(C.TopNeutral) {
         Column(
@@ -65,6 +128,76 @@ fun AjustesScreen(vm: MainViewModel, onBack: () -> Unit, onCategories: () -> Uni
                 })
             }
 
+            Section("Apariencia") {
+                val themes = listOf("dark" to "Oscuro", "light" to "Claro", "system" to "Como el teléfono")
+                Column(Modifier.padding(horizontal = 14.dp, vertical = 12.dp)) {
+                    Text("Tema", color = C.Text, fontSize = 16.sp)
+                    Spacer(Modifier.height(8.dp))
+                    ChoiceRow(themes.mapIndexed { i, t -> i.toLong() to t.second }, themes.indexOfFirst { it.first == Prefs.theme }.toLong()) { i ->
+                        Prefs.theme = themes[i.toInt()].first
+                        // Volver a abrir la pantalla para aplicar colores y barras del sistema.
+                        (ctx as? android.app.Activity)?.recreate()
+                    }
+                    Spacer(Modifier.height(6.dp))
+                    Text("Los widgets siguen el modo claro/oscuro del teléfono.", color = C.Sub, fontSize = 12.sp)
+                }
+            }
+
+            Section("Recordatorios") {
+                SettingRow(Icons.Filled.NotificationsActive, "Avisar vencimientos", trailing = {
+                    Switch(Prefs.remindDue, { Prefs.remindDue = it; reminderChanged() }, colors = switchColors)
+                })
+                if (Prefs.remindDue) {
+                    OptionPills("Con cuánta anticipación", listOf(1 to "1 día antes", 2 to "2 días", 3 to "3 días"), Prefs.dueDaysBefore) {
+                        Prefs.dueDaysBefore = it
+                    }
+                    OptionPills("A qué hora", listOf(8, 9, 12, 18, 21).map { it to "$it hs" }, Prefs.dueHour) {
+                        Prefs.dueHour = it; reminderChanged(hourChanged = true)
+                    }
+                }
+                RowDivider()
+                SettingRow(Icons.Filled.Edit, "Aviso diario: ¿cargaste tus gastos?", trailing = {
+                    Switch(Prefs.remindDaily, { Prefs.remindDaily = it; reminderChanged() }, colors = switchColors)
+                })
+                if (Prefs.remindDaily) {
+                    OptionPills("A qué hora", listOf(20, 21, 22, 23).map { it to "$it hs" }, Prefs.dailyHour) {
+                        Prefs.dailyHour = it; reminderChanged(hourChanged = true)
+                    }
+                }
+                RowDivider()
+                SettingRow(Icons.Filled.CalendarMonth, "Resumen semanal (domingo 20 hs)", trailing = {
+                    Switch(Prefs.weeklySummary, { Prefs.weeklySummary = it; reminderChanged() }, colors = switchColors)
+                })
+                RowDivider()
+                SettingRow(Icons.Filled.PieChart, "Presupuesto al 80% y al 100%", trailing = {
+                    Switch(Prefs.budgetAlerts, { Prefs.budgetAlerts = it; reminderChanged() }, colors = switchColors)
+                })
+                RowDivider()
+                SettingRow(
+                    Icons.Filled.Warning, "Gasto grande",
+                    value = if (Prefs.bigExpense > 0) "desde ${Fmt.money(Prefs.bigExpense)}" else "Apagado",
+                    onClick = { amountDialog = "big" }
+                )
+                RowDivider()
+                SettingRow(
+                    Icons.Filled.Savings, "Poca plata en la cuenta del sueldo",
+                    value = if (Prefs.lowBalance > 0) "menos de ${Fmt.money(Prefs.lowBalance)}" else "Apagado",
+                    onClick = { amountDialog = "low" }
+                )
+                RowDivider()
+                SettingRow(Icons.Filled.MusicNote, "Sonido y vibración de cada aviso", onClick = {
+                    Reminders.openSystemSettings(ctx)
+                }, trailing = { Chevron() })
+                RowDivider()
+                SettingRow(Icons.Filled.NotificationsActive, "Probar notificación", onClick = {
+                    if (!Reminders.canNotify(ctx) && android.os.Build.VERSION.SDK_INT >= 33) {
+                        notifPermission.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+                    } else {
+                        Reminders.notify(ctx, 999, "Así se ven los avisos", "Cuentas Claras te va a avisar acá.", tab = 0)
+                    }
+                })
+            }
+
             Section("Privacidad") {
                 SettingRow(Icons.Filled.VisibilityOff, "Ocultar saldos", trailing = {
                     Switch(Prefs.hideBalances, { Prefs.hideBalances = it; scope.launch { WidgetUpdater.refresh(ctx) } }, colors = switchColors)
@@ -74,14 +207,20 @@ fun AjustesScreen(vm: MainViewModel, onBack: () -> Unit, onCategories: () -> Uni
             Section("Datos") {
                 SettingRow(Icons.Filled.FileUpload, "Exportar datos (CSV)", onClick = {
                     scope.launch {
-                        val file = vm.repo.exportCsv()
-                        val uri = FileProvider.getUriForFile(ctx, "${ctx.packageName}.fileprovider", file)
-                        val send = Intent(Intent.ACTION_SEND).apply {
-                            type = "text/csv"
-                            putExtra(Intent.EXTRA_STREAM, uri)
-                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        try {
+                            val file = vm.repo.exportCsv()
+                            val uri = FileProvider.getUriForFile(ctx, "${ctx.packageName}.fileprovider", file)
+                            val send = Intent(Intent.ACTION_SEND).apply {
+                                type = "text/csv"
+                                putExtra(Intent.EXTRA_STREAM, uri)
+                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                            }
+                            ctx.startActivity(Intent.createChooser(send, "Exportar movimientos"))
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (e: Exception) {
+                            Toast.makeText(ctx, "No se pudo exportar: ${e.message ?: "error desconocido"}", Toast.LENGTH_LONG).show()
                         }
-                        ctx.startActivity(Intent.createChooser(send, "Exportar movimientos"))
                     }
                 }, trailing = { Chevron() })
                 RowDivider()
@@ -92,20 +231,226 @@ fun AjustesScreen(vm: MainViewModel, onBack: () -> Unit, onCategories: () -> Uni
                 SettingRow(Icons.Filled.DeleteForever, "Borrar movimientos", onClick = { confirmClear = true }, trailing = { Chevron() })
             }
 
+            Section("Backup automático") {
+                SettingRow(
+                    Icons.Filled.CloudUpload, "Carpeta del backup semanal",
+                    value = if (Prefs.backupFolder.isBlank()) "Elegir" else "Cambiar",
+                    onClick = { folderPicker.launch(null) }
+                )
+                if (Prefs.backupFolder.isNotBlank()) {
+                    RowDivider()
+                    SettingRow(Icons.Filled.Backup, "Hacer backup ahora", onClick = {
+                        scope.launch {
+                            try {
+                                Backup.run(ctx)
+                                Toast.makeText(ctx, "Backup guardado", Toast.LENGTH_SHORT).show()
+                            } catch (e: CancellationException) {
+                                throw e
+                            } catch (e: Exception) {
+                                Toast.makeText(ctx, "No se pudo guardar el backup: ${e.message ?: "error desconocido"}", Toast.LENGTH_LONG).show()
+                            }
+                        }
+                    }, trailing = { Chevron() })
+                    RowDivider()
+                    SettingRow(Icons.Filled.CloudOff, "Desactivar backup automático", onClick = {
+                        Prefs.backupFolder = ""
+                        Backup.schedule(ctx)
+                    })
+                }
+                Text(
+                    (if (Prefs.lastBackup.isNotBlank()) "Último backup: ${Prefs.lastBackup}.\n" else "") +
+                        "Cada semana se guarda un CSV en esa carpeta. Si elegís una carpeta de Google Drive " +
+                        "(o una que se sincronice con Drive), el backup queda en la nube. Para recuperar: Importar datos (CSV).",
+                    color = C.Sub, fontSize = 13.sp, modifier = Modifier.padding(16.dp)
+                )
+            }
+
+            Section("Bot de Telegram (cargar con un mensaje)") {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    when {
+                        Prefs.telegramToken.isBlank() -> {
+                            Text(
+                                "1. En Telegram buscá @BotFather y mandale /newbot.\n" +
+                                    "2. Elegí un nombre y un usuario que termine en \"bot\" (ej. NestorCuentasBot).\n" +
+                                    "3. Te da un código largo (token). Copialo y pegalo acá:",
+                                color = C.Sub, fontSize = 14.sp
+                            )
+                            Field(tgToken, { tgToken = it.trim() }, "Token del bot")
+                            PrimaryButton(if (tgChecking) "Revisando…" else "Guardar") {
+                                if (!tgChecking && tgToken.isNotBlank()) scope.launch {
+                                    tgChecking = true
+                                    val old = Prefs.telegramToken
+                                    Prefs.telegramToken = tgToken
+                                    val name = TelegramBot.check()
+                                    tgChecking = false
+                                    if (name == null) {
+                                        Prefs.telegramToken = old
+                                        Toast.makeText(ctx, "Ese token no funciona (revisá que esté completo y que haya internet)", Toast.LENGTH_LONG).show()
+                                    } else {
+                                        Prefs.telegramChat = 0L
+                                        Prefs.telegramOffset = 0L
+                                        TelegramBot.schedule(ctx)
+                                        tgToken = ""
+                                        Toast.makeText(ctx, "Bot $name listo", Toast.LENGTH_LONG).show()
+                                    }
+                                }
+                            }
+                        }
+                        Prefs.telegramChat == 0L -> {
+                            Text("Ahora abrí tu bot en Telegram y mandale este código para vincularlo:", color = C.Sub, fontSize = 14.sp)
+                            Text(Prefs.telegramCode, color = C.Text, fontSize = 34.sp, fontWeight = FontWeight.Bold)
+                            Text("Con la app abierta responde al instante.", color = C.Sub, fontSize = 13.sp)
+                        }
+                        else -> {
+                            Text("✅ Bot vinculado. Escribile por ejemplo:", color = C.Text, fontSize = 15.sp)
+                            Text("café 2500 · super 15 mil tarjeta · nafta 20000 ayer · + sueldo 800000\n/saldo · /mes · /deshacer", color = C.Sub, fontSize = 14.sp)
+                            Text("Con la app cerrada, los mensajes se cargan solos cada 15 minutos.", color = C.Sub, fontSize = 13.sp)
+                        }
+                    }
+                    if (Prefs.telegramToken.isNotBlank()) {
+                        TextButton(onClick = {
+                            Prefs.telegramToken = ""
+                            Prefs.telegramChat = 0L
+                            Prefs.telegramOffset = 0L
+                            TelegramBot.schedule(ctx)
+                        }) { Text("Quitar el bot", color = C.Red) }
+                    }
+                }
+            }
+
+            Section("Avisos del banco y Mercado Pago") {
+                val allowed = NotificationManagerCompat.getEnabledListenerPackages(ctx).contains(ctx.packageName)
+                SettingRow(Icons.Filled.AccountBalance, "Proponer cargar mis pagos", trailing = {
+                    Switch(Prefs.captureBank, {
+                        Prefs.captureBank = it
+                        if (it && !allowed) {
+                            Toast.makeText(ctx, "Buscá \"Cuentas Claras\" en la lista y activá el permiso", Toast.LENGTH_LONG).show()
+                            ctx.startActivity(Intent(android.provider.Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+                        }
+                    }, colors = switchColors)
+                })
+                Text(
+                    (if (Prefs.captureBank && !allowed) "⚠️ Falta el permiso \"Acceso a notificaciones\": apagá y prendé el interruptor para abrirlo.\n\n" else "") +
+                        "Cuando te llegue un aviso tipo \"Pagaste \$ 4.500 en Farmacia\", te aparece \"¿Cargar gasto de \$ 4.500?\". " +
+                        "Al tocarlo se abre la carga completa y solo confirmás. Nunca se guarda nada sin que toques Guardar.",
+                    color = C.Sub, fontSize = 13.sp, modifier = Modifier.padding(16.dp)
+                )
+            }
+
+            Section("Página web (ver y cargar desde la PC)") {
+                if (CloudSync.email.value.isBlank()) {
+                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text(
+                            "Conectá la cuenta que creaste en Firebase para ver todo en vivo desde la página web y cargar movimientos desde la PC.",
+                            color = C.Sub, fontSize = 14.sp
+                        )
+                        Field(syncMail, { syncMail = it }, "Mail")
+                        OutlinedTextField(
+                            value = syncPass, onValueChange = { syncPass = it }, label = { Text("Contraseña") },
+                            singleLine = true, modifier = Modifier.fillMaxWidth(),
+                            visualTransformation = PasswordVisualTransformation(),
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password)
+                        )
+                        PrimaryButton(if (connecting) "Conectando…" else "Conectar") {
+                            if (!connecting && syncMail.isNotBlank() && syncPass.isNotBlank()) scope.launch {
+                                connecting = true
+                                try {
+                                    CloudSync.signIn(ctx, syncMail, syncPass)
+                                    syncPass = ""
+                                    Toast.makeText(ctx, "Conectado. Ya podés abrir la página web.", Toast.LENGTH_LONG).show()
+                                } catch (e: CancellationException) {
+                                    throw e
+                                } catch (e: Exception) {
+                                    Toast.makeText(ctx, "No se pudo conectar: revisá mail, contraseña e internet (${e.message})", Toast.LENGTH_LONG).show()
+                                } finally {
+                                    connecting = false
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    SettingRow(Icons.Filled.CloudDone, "Conectado: ${CloudSync.email.value}", value = CloudSync.status.value.ifBlank { null })
+                    RowDivider()
+                    SettingRow(Icons.Filled.Sync, "Sincronizar ahora", onClick = {
+                        scope.launch {
+                            try {
+                                CloudSync.pullInbox(ctx)
+                                CloudSync.push(ctx)
+                                Toast.makeText(ctx, "Sincronizado", Toast.LENGTH_SHORT).show()
+                            } catch (e: CancellationException) {
+                                throw e
+                            } catch (e: Exception) {
+                                Toast.makeText(ctx, "No se pudo sincronizar: ${e.message}", Toast.LENGTH_LONG).show()
+                            }
+                        }
+                    }, trailing = { Chevron() })
+                    RowDivider()
+                    SettingRow(Icons.Filled.CloudOff, "Desconectar", onClick = { CloudSync.signOut(ctx) })
+                    Text(
+                        "En la PC abrí nestorchallier.github.io/CuentasClaras y entrá con el mismo mail y contraseña. " +
+                            "Lo que cargues en la web aparece acá al abrir la app (o solo, cada 15 minutos).",
+                        color = C.Sub, fontSize = 13.sp, modifier = Modifier.padding(16.dp)
+                    )
+                }
+            }
+
+            Section("Doble toque atrás del celular") {
+                Text(
+                    "Mantené apretado el ícono de Cuentas Claras: aparecen \"Nuevo gasto\" y \"Nuevo ingreso\". " +
+                        "Esos accesos se pueden usar con un gesto:\n\n" +
+                        "• Con la app gratuita \"Tap, Tap\": Acciones → Doble toque → Abrir acceso directo → Cuentas Claras → Nuevo gasto.\n" +
+                        "• Si tu celular trae el gesto (Xiaomi: Ajustes adicionales → Gestos → Toque posterior), elegí abrir el acceso directo.\n\n" +
+                        "Se abre la hoja para escribir el monto, igual que el widget.",
+                    color = C.Sub, fontSize = 14.sp, modifier = Modifier.padding(16.dp)
+                )
+            }
+
             Section("Widgets") {
                 Text(
                     "Mantené presionada la pantalla de inicio → Widgets → Cuentas Claras.\n\n" +
                         "• Carga rápida (4×1): botones para cargar un gasto o un ingreso en segundos.\n" +
-                        "• Resumen del mes (4×2): gastos del mes, gráfico por día y presupuesto disponible.",
+                        "• Resumen del mes (4×2): gastos del mes, gráfico por día y presupuesto disponible.\n" +
+                        "• Últimos movimientos (4×3): tus últimos gastos e ingresos y lo gastado en el mes.\n" +
+                        "• Gastos por categoría (4×2): dona con la distribución de gastos del mes.\n" +
+                        "• Saldos de cuentas (3×2): saldo total y de cada cuenta.",
                     color = C.Sub, fontSize = 14.sp, modifier = Modifier.padding(16.dp)
                 )
             }
 
             Text(
-                "Cuentas Claras 1.1 · tus datos se guardan solo en este teléfono. Exportá un CSV cada tanto como respaldo.",
+                "Cuentas Claras 1.6 · tus datos se guardan en este teléfono (y en tu cuenta de Firebase si conectaste la página web). Exportá un CSV cada tanto como respaldo.",
                 color = C.Sub, fontSize = 12.sp, modifier = Modifier.padding(top = 20.dp, start = 4.dp)
             )
         }
+    }
+
+    amountDialog?.let { which ->
+        val big = which == "big"
+        var v by remember { mutableStateOf((if (big) Prefs.bigExpense else Prefs.lowBalance).takeIf { it > 0 }?.let { Fmt.plain(it) } ?: "") }
+        AlertDialog(
+            onDismissRequest = { amountDialog = null },
+            containerColor = C.Card,
+            title = { Text(if (big) "Aviso de gasto grande" else "Aviso de poca plata", color = C.Text) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        if (big) "Te aviso cuando cargues un gasto igual o mayor a este monto (en pesos)."
+                        else "Te aviso cuando lo que te queda del mes en la cuenta del sueldo baje de este monto.",
+                        color = C.Sub, fontSize = 14.sp
+                    )
+                    Field(v, { v = it }, "Monto (vacío = apagado)", number = true)
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val n = Fmt.parse(v).coerceAtLeast(0.0)
+                    if (big) Prefs.bigExpense = n else Prefs.lowBalance = n
+                    amountDialog = null
+                    reminderChanged()
+                }) { Text("Guardar", color = C.Teal) }
+            },
+            dismissButton = { TextButton(onClick = { amountDialog = null }) { Text("Cancelar", color = C.Sub) } }
+        )
     }
 
     if (currencyDialog) {
@@ -148,5 +493,15 @@ fun AjustesScreen(vm: MainViewModel, onBack: () -> Unit, onCategories: () -> Uni
             },
             dismissButton = { TextButton(onClick = { confirmClear = false }) { Text("Cancelar", color = C.Sub) } }
         )
+    }
+}
+
+/** Fila de opciones (pastillas) dentro de una sección de Ajustes. */
+@Composable
+private fun OptionPills(title: String, options: List<Pair<Int, String>>, selected: Int, onSelect: (Int) -> Unit) {
+    Column(Modifier.padding(start = 68.dp, end = 14.dp, bottom = 10.dp)) {
+        Text(title, color = C.Sub, fontSize = 13.sp)
+        Spacer(Modifier.height(6.dp))
+        ChoiceRow(options.map { it.first.toLong() to it.second }, selected.toLong()) { onSelect(it.toInt()) }
     }
 }

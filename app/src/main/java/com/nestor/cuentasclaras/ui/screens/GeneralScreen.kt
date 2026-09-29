@@ -34,6 +34,7 @@ import com.nestor.cuentasclaras.ui.MainViewModel
 import com.nestor.cuentasclaras.ui.components.*
 import com.nestor.cuentasclaras.ui.theme.C
 import com.nestor.cuentasclaras.util.Dates
+import com.nestor.cuentasclaras.util.Balances
 import com.nestor.cuentasclaras.util.Fmt
 import com.nestor.cuentasclaras.util.GeneralCards
 import com.nestor.cuentasclaras.util.Prefs
@@ -44,7 +45,9 @@ import kotlin.math.max
 
 @Composable
 fun GeneralScreen(vm: MainViewModel, onSettings: () -> Unit, onRecurrings: () -> Unit) {
-    val all by vm.txs.collectAsState()
+    val all by vm.txsArs.collectAsState()
+    // Sin convertir: para los saldos de cada cuenta en su moneda.
+    val raw by vm.txs.collectAsState()
     val accs by vm.accounts.collectAsState()
     val cats by vm.categories.collectAsState()
     val recs by vm.recurrings.collectAsState()
@@ -98,7 +101,7 @@ fun GeneralScreen(vm: MainViewModel, onSettings: () -> Unit, onRecurrings: () ->
                     "proyeccion" -> ProyeccionCard(scoped, recs, accF, selMonth, ing[sel])
                     "presupuesto" -> PresupuestoCard(cats, gas[sel], selMonth)
                     "categorias" -> CategoriasCard(scoped, cats, selMonth)
-                    "cuentas" -> CuentasCard(all, accs)
+                    "cuentas" -> CuentasCard(raw, accs)
                     "recurrentes" -> RecurrentesCard(recs, onRecurrings)
                     "calendario" -> CalendarioCard(scoped, selMonth)
                 }
@@ -250,19 +253,18 @@ private fun CategoriasCard(scoped: List<Tx>, cats: List<Category>, month: YearMo
 
 @Composable
 private fun CuentasCard(all: List<Tx>, accs: List<Account>) {
-    val balances = accs.map { a ->
-        a to (a.initialBalance + all.filter { it.accountId == a.id }.sumOf { if (it.type == TxType.INGRESO) it.amount else -it.amount })
-    }
+    val byId = Balances.of(accs, all)
+    val balances = accs.map { a -> a to (byId[a.id] ?: 0.0) }
     CardBox {
         Text("Saldos por cuenta", color = C.Sub, fontSize = 14.sp)
-        Text(Fmt.money(balances.sumOf { it.second }), color = C.Text, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+        Text(Fmt.money(Balances.totalArs(accs, byId)), color = C.Text, fontSize = 24.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(8.dp))
         balances.forEach { (a, b) ->
             Row(Modifier.fillMaxWidth().padding(vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text(a.emoji, fontSize = 18.sp)
                 Spacer(Modifier.width(10.dp))
                 Text(a.name, color = C.Text, fontSize = 14.sp, modifier = Modifier.weight(1f), maxLines = 1)
-                Text(Fmt.money(b), color = if (b < 0) C.Red else C.Text, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                Text(Fmt.money(b, a), color = if (b < 0) C.Red else C.Text, fontSize = 14.sp, fontWeight = FontWeight.Medium)
             }
         }
     }
@@ -355,13 +357,6 @@ private fun StatRow(label: String, value: String) {
     Row(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
         Text(label, color = C.Sub, fontSize = 14.sp, modifier = Modifier.weight(1f))
         Text(value, color = C.Text, fontSize = 14.sp, fontWeight = FontWeight.Medium)
-    }
-}
-
-@Composable
-private fun ProgressBar(progress: Float, color: Color) {
-    Box(Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp)).background(C.CardHi)) {
-        Box(Modifier.fillMaxWidth(progress.coerceIn(0f, 1f)).fillMaxHeight().clip(RoundedCornerShape(4.dp)).background(color))
     }
 }
 

@@ -13,17 +13,23 @@ import com.nestor.cuentasclaras.data.Tx
 import com.nestor.cuentasclaras.data.TxType
 import com.nestor.cuentasclaras.repo
 import com.nestor.cuentasclaras.ui.MainActivity
+import com.nestor.cuentasclaras.util.Balances
 import com.nestor.cuentasclaras.util.Dates
 import com.nestor.cuentasclaras.util.Fmt
+import com.nestor.cuentasclaras.util.Money
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import java.time.LocalDate
 import java.time.YearMonth
 import kotlin.math.max
 
-data class RecentItem(val emoji: String, val title: String, val subtitle: String, val amount: Double, val income: Boolean)
+data class RecentItem(
+    val emoji: String, val title: String, val subtitle: String, val amount: Double, val income: Boolean,
+    /** Cuenta del movimiento (para mostrar US$ si es en dólares). */
+    val account: Account? = null
+)
 data class CatSlice(val emoji: String, val name: String, val color: Long, val amount: Double)
-data class AccItem(val emoji: String, val name: String, val balance: Double)
+data class AccItem(val emoji: String, val name: String, val balance: Double, val account: Account? = null, val balanceArs: Double = balance)
 
 data class Snapshot(
     val monthName: String,
@@ -37,7 +43,8 @@ data class Snapshot(
     val slices: List<CatSlice> = emptyList(),
     val accounts: List<AccItem> = emptyList()
 ) {
-    val totalBalance: Double get() = accounts.sumOf { it.balance }
+    /** Saldo total en pesos (las cuentas en dólares, convertidas). */
+    val totalBalance: Double get() = accounts.sumOf { it.balanceArs }
 }
 
 object WidgetData {
@@ -46,7 +53,8 @@ object WidgetData {
         val today = LocalDate.now()
         val catMap = cats.associateBy { it.id }
         val accMap = accs.associateBy { it.id }
-        val month = Dates.inMonth(txs, ym)
+        // Gastos e ingresos en pesos (lo de cuentas en dólares, convertido).
+        val month = Dates.inMonth(Money.inArs(txs, accs), ym)
         val gastos = month.filter { it.type == TxType.GASTO }
         val daily = DoubleArray(ym.lengthOfMonth())
         gastos.forEach { daily[Dates.day(it.date) - 1] += it.amount }
@@ -54,12 +62,15 @@ object WidgetData {
         val nowMs = System.currentTimeMillis()
         val recent = txs.asSequence().filter { it.date <= nowMs }.take(12).map { t ->
             val c = catMap[t.categoryId]
+            val accText = if (t.isTransfer) "${accMap[t.accountId]?.name ?: ""} → ${accMap[t.toAccountId]?.name ?: ""}"
+                else accMap[t.accountId]?.name ?: ""
             RecentItem(
-                emoji = c?.emoji ?: "❔",
-                title = t.note.ifBlank { c?.name ?: "Sin categoría" },
-                subtitle = "${Dates.dayLabel(Dates.localDate(t.date))} · ${accMap[t.accountId]?.name ?: ""}",
+                emoji = if (t.isTransfer) "⇄" else c?.emoji ?: "❔",
+                title = t.note.ifBlank { if (t.isTransfer) "Transferencia" else c?.name ?: "Sin categoría" },
+                subtitle = "${Dates.dayLabel(Dates.localDate(t.date))} · $accText",
                 amount = t.amount,
-                income = t.type == TxType.INGRESO
+                income = t.type == TxType.INGRESO,
+                account = accMap[t.accountId]
             )
         }.toList()
 
@@ -68,9 +79,10 @@ object WidgetData {
             CatSlice(c?.emoji ?: "❔", c?.name ?: "Sin categoría", c?.color ?: 0xFF94A3B8, e.value.sumOf { it.amount })
         }.sortedByDescending { it.amount }
 
+        val byId = Balances.of(accs, txs)
         val accounts = accs.map { a ->
-            AccItem(a.emoji, a.name, a.initialBalance + txs.filter { it.accountId == a.id }
-                .sumOf { if (it.type == TxType.INGRESO) it.amount else -it.amount })
+            val b = byId[a.id] ?: 0.0
+            AccItem(a.emoji, a.name, b, a, Money.toArs(b, a))
         }
 
         return Snapshot(
@@ -98,7 +110,7 @@ object WidgetData {
     }
 
     /** Gráfico de barras diario dibujado como imagen (Glance no tiene Canvas). */
-    fun barsBitmap(values: List<Double>, highlight: Int, w: Int = 720, h: Int = 200): Bitmap {
+    fun barsBitmap(values: List<Double>, highlight: Int, w: Int = 720, h: Int = 200, night: Boolean = true): Bitmap {
         val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
         val c = Canvas(bmp)
         val n = values.size.coerceAtLeast(1)
@@ -106,9 +118,9 @@ object WidgetData {
         val slot = w.toFloat() / n
         val bw = slot * 0.6f
         val r = bw / 2
-        val track = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0x14FFFFFF }
-        val bar = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFFF1F5F7.toInt() }
-        val hl = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFF2DD4BF.toInt() }
+        val track = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = if (night) 0x14FFFFFF else 0x14000000 }
+        val bar = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = (if (night) 0xFFF1F5F7 else 0xFF12171B).toInt() }
+        val hl = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = (if (night) 0xFF2DD4BF else 0xFF0D9488).toInt() }
         values.forEachIndexed { i, v ->
             val x = i * slot + (slot - bw) / 2
             c.drawRoundRect(RectF(x, 0f, x + bw, h.toFloat()), r, r, track)
@@ -121,7 +133,7 @@ object WidgetData {
     }
 
     /** Dona por categoría como imagen. */
-    fun donutBitmap(slices: List<CatSlice>, size: Int = 360): Bitmap {
+    fun donutBitmap(slices: List<CatSlice>, size: Int = 360, night: Boolean = true): Bitmap {
         val bmp = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
         val c = Canvas(bmp)
         val sw = size * 0.13f
@@ -129,7 +141,7 @@ object WidgetData {
         val p = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeWidth = sw }
         val total = slices.sumOf { it.amount }
         if (total <= 0) {
-            p.color = 0xFF323B42.toInt()
+            p.color = (if (night) 0xFF323B42 else 0xFFE4E9ED).toInt()
             c.drawArc(rect, 0f, 360f, false, p)
             return bmp
         }

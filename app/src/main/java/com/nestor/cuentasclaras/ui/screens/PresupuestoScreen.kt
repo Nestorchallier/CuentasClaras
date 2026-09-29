@@ -25,7 +25,7 @@ import com.nestor.cuentasclaras.util.Fmt
 
 @Composable
 fun PresupuestoScreen(vm: MainViewModel, onEditBudgets: () -> Unit, onSettings: () -> Unit) {
-    val all by vm.txs.collectAsState()
+    val all by vm.txsArs.collectAsState()
     val cats by vm.categories.collectAsState()
     val month = vm.month
     val gastos = remember(all, month) { Dates.inMonth(all, month).filter { it.type == TxType.GASTO } }
@@ -66,7 +66,7 @@ fun PresupuestoScreen(vm: MainViewModel, onEditBudgets: () -> Unit, onSettings: 
                 item {
                     RingProgress(
                         progress = (available / totalBudget).toFloat(),
-                        color = if (available >= 0) Color.White else C.Red,
+                        color = if (available >= 0) C.Text else C.Red,
                         modifier = Modifier.fillMaxWidth().height(310.dp).padding(horizontal = 24.dp, vertical = 16.dp)
                     ) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {

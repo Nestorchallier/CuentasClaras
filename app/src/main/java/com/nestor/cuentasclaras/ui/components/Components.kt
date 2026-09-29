@@ -146,7 +146,7 @@ fun TxRow(tx: Tx, cat: Category?, acc: Account?, onClick: () -> Unit) {
         Spacer(Modifier.width(8.dp))
         val income = tx.type == TxType.INGRESO
         Text(
-            (if (income) "+" else "") + Fmt.money(tx.amount),
+            (if (income) "+" else "") + Fmt.money(tx.amount, acc),
             color = if (income) C.Green else C.Text, fontSize = 16.sp, fontWeight = FontWeight.Medium
         )
     }
@@ -340,5 +340,13 @@ fun MonthGrid(month: YearMonth, cell: @Composable RowScope.(LocalDate?) -> Unit)
                 repeat(7 - week.size) { Spacer(Modifier.weight(1f)) }
             }
         }
+    }
+}
+
+/** Barra de avance redondeada (presupuestos, sueldo del mes). */
+@Composable
+fun ProgressBar(progress: Float, color: Color) {
+    Box(Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp)).background(C.CardHi)) {
+        Box(Modifier.fillMaxWidth(progress.coerceIn(0f, 1f)).fillMaxHeight().clip(RoundedCornerShape(4.dp)).background(color))
     }
 }

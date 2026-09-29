@@ -1,6 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <!-- Recordatorios de vencimientos (Android 13+ pide permiso al usuario) -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Cotización del dólar (dolarapi.com) -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
     <application
         android:name=".CuentasApp"
         android:allowBackup="true"
@@ -18,16 +23,33 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <!-- Accesos directos: mantener apretado el ícono → "Nuevo gasto" / "Nuevo ingreso".
+                 También los usan apps de gestos (ej. doble toque atrás con "Tap, Tap"). -->
+            <meta-data
+                android:name="android.app.shortcuts"
+                android:resource="@xml/shortcuts" />
         </activity>
 
-        <!-- Hoja flotante de carga rápida que abren los widgets -->
+        <!-- Hoja flotante de carga rápida que abren los widgets y los accesos directos.
+             Exportada para que las apps de gestos puedan abrirla (solo muestra el formulario). -->
         <activity
             android:name=".widget.QuickAddActivity"
-            android:exported="false"
+            android:exported="true"
             android:excludeFromRecents="true"
             android:taskAffinity=""
             android:theme="@style/Theme.CuentasClaras.Translucent"
             android:windowSoftInputMode="adjustResize" />
+
+        <!-- Lee avisos de pagos del banco / Mercado Pago (solo si se activa en Ajustes y se da el permiso) -->
+        <service
+            android:name=".capture.BankNotificationListener"
+            android:exported="true"
+            android:label="Cuentas Claras: avisos de pagos"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
 
         <receiver
             android:name=".widget.DashboardWidgetReceiver"

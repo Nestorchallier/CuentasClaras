@@ -18,6 +18,7 @@ import com.nestor.cuentasclaras.ui.components.*
 import com.nestor.cuentasclaras.ui.theme.C
 import com.nestor.cuentasclaras.util.Dates
 import com.nestor.cuentasclaras.util.Fmt
+import com.nestor.cuentasclaras.util.Money
 
 /** Tendencia de 12 meses de una categoría + movimientos del mes elegido. */
 @Composable
@@ -31,7 +32,7 @@ fun CategoryDetailScreen(vm: MainViewModel, catId: Long, onBack: () -> Unit, onO
     val months = remember(vm.month) { (11 downTo 0).map { vm.month.minusMonths(it.toLong()) } }
     var sel by remember(vm.month) { mutableIntStateOf(11) }
     val catTxs = remember(all, catId) { all.filter { it.categoryId == catId } }
-    val totals = remember(catTxs, months) { months.map { m -> Dates.inMonth(catTxs, m).sumOf { it.amount } } }
+    val totals = remember(catTxs, months, accMap, Money.usdToArs) { months.map { m -> Money.sumArs(Dates.inMonth(catTxs, m), accMap) } }
     val nonZero = totals.filter { it > 0 }
     val avg = if (nonZero.isEmpty()) 0.0 else nonZero.average()
     val list = remember(catTxs, sel, months) { Dates.inMonth(catTxs, months[sel]) }
@@ -75,7 +76,7 @@ fun CategoryDetailScreen(vm: MainViewModel, catId: Long, onBack: () -> Unit, onO
                 val date = entry.key
                 val l = entry.value
                 item(key = date.toString()) {
-                    TxGroup(Dates.dayLabel(date), Fmt.money(l.sumOf { it.amount })) {
+                    TxGroup(Dates.dayLabel(date), Fmt.money(Money.sumArs(l, accMap))) {
                         l.forEachIndexed { i, t ->
                             if (i > 0) RowDivider()
                             TxRow(t, cat, accMap[t.accountId]) { onOpenTx(t) }

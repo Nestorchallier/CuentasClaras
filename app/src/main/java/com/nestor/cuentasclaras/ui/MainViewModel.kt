@@ -8,7 +8,10 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.nestor.cuentasclaras.data.TxType
 import com.nestor.cuentasclaras.repo
+import androidx.compose.runtime.snapshotFlow
+import com.nestor.cuentasclaras.util.Money
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.time.YearMonth
@@ -20,6 +23,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     val categories = repo.db.categories().observe().stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
     val accounts = repo.db.accounts().observe().stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
     val recurrings = repo.db.recurrings().observe().stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    /** Movimientos con lo de cuentas en dólares pasado a pesos: para resúmenes, presupuestos y gráficos. */
+    val txsArs = combine(txs, accounts, snapshotFlow { Money.usdToArs }) { t, a, _ -> Money.inArs(t, a) }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     /** Filtros compartidos entre pantallas */
     var month by mutableStateOf(YearMonth.now())

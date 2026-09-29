@@ -7,8 +7,8 @@ import androidx.room.RoomDatabase
 
 @Database(
     entities = [Category::class, Account::class, Tx::class, Recurring::class],
-    version = 1,
-    exportSchema = false
+    version = 4,
+    exportSchema = true
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun categories(): CategoryDao
@@ -25,7 +25,7 @@ abstract class AppDatabase : RoomDatabase() {
                     context.applicationContext,
                     AppDatabase::class.java,
                     "cuentas_claras.db"
-                ).build().also { INSTANCE = it }
+                ).addMigrations(*Migrations.ALL).build().also { INSTANCE = it }
             }
     }
 }

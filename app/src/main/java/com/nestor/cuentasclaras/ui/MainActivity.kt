@@ -1,11 +1,12 @@
 package com.nestor.cuentasclaras.ui
 
+import android.Manifest
+import android.os.Build
 import android.os.Bundle
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.ComponentActivity
-import androidx.activity.SystemBarStyle
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
-import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -32,19 +33,49 @@ import com.nestor.cuentasclaras.ui.components.GradientBg
 import com.nestor.cuentasclaras.ui.screens.*
 import com.nestor.cuentasclaras.ui.theme.AppTheme
 import com.nestor.cuentasclaras.ui.theme.C
+import com.nestor.cuentasclaras.reminders.Reminders
+import com.nestor.cuentasclaras.capture.TelegramBot
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
+import com.nestor.cuentasclaras.util.Prefs
 
 class MainActivity : ComponentActivity() {
     private val vm: MainViewModel by viewModels()
+    private val askNotifications = registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge(
-            statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
-            navigationBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT)
-        )
+        C.applyTheme(this)
         // Los widgets abren la app en una pestaña: cuentasclaras://open/<n>
         val startTab = intent?.data?.takeIf { it.host == "open" }?.lastPathSegment?.toIntOrNull()?.coerceIn(0, 4) ?: 0
         setContent { AppTheme { AppRoot(vm, startTab) } }
+
+        // Bot de Telegram: con la app abierta, esperar mensajes en vivo.
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                while (isActive) {
+                    if (!TelegramBot.enabled) { delay(5_000); continue }
+                    try {
+                        TelegramBot.poll(this@MainActivity, waitSeconds = 25)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        delay(15_000) // sin internet o token inválido: reintentar más tarde
+                    }
+                }
+            }
+        }
+
+        // Recordatorios: en Android 13+ hay que pedir permiso para notificar (una sola vez).
+        if (Build.VERSION.SDK_INT >= 33 && Prefs.remindDue && !Reminders.canNotify(this) && !Prefs.askedNotifications) {
+            Prefs.askedNotifications = true
+            askNotifications.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
     }
 
     override fun onResume() {
@@ -61,6 +92,7 @@ sealed interface Route {
     data object Categories : Route
     data object Recurrings : Route
     data class CategoryDetail(val id: Long) : Route
+    data class CardDetail(val id: Long) : Route
 }
 
 @Composable
@@ -83,13 +115,13 @@ fun AppRoot(vm: MainViewModel, startTab: Int = 0) {
                     1 -> ResumenScreen(vm, onSettings = { push(Route.Settings) }, onOpenCategory = { push(Route.CategoryDetail(it)) })
                     2 -> PresupuestoScreen(vm, onEditBudgets = { push(Route.Categories) }, onSettings = { push(Route.Settings) })
                     3 -> GeneralScreen(vm, onSettings = { push(Route.Settings) }, onRecurrings = { push(Route.Recurrings) })
-                    else -> CuentasScreen(vm, onSettings = { push(Route.Settings) })
+                    else -> CuentasScreen(vm, onSettings = { push(Route.Settings) }, onOpenCard = { push(Route.CardDetail(it)) })
                 }
                 // Botón + flotante
                 Box(
                     Modifier.align(Alignment.BottomEnd).navigationBarsPadding()
                         .padding(end = 20.dp, bottom = 96.dp).size(62.dp).clip(CircleShape)
-                        .background(Brush.verticalGradient(listOf(Color.White, Color(0xFFD5DBE0))))
+                        .background(Brush.verticalGradient(listOf(C.FabTop, C.FabBottom)))
                         .clickable { push(Route.Editor(null, vm.typeFilter)) },
                     contentAlignment = Alignment.Center
                 ) { Icon(Icons.Filled.Add, "Nuevo movimiento", tint = C.Bg, modifier = Modifier.size(30.dp)) }
@@ -106,6 +138,7 @@ fun AppRoot(vm: MainViewModel, startTab: Int = 0) {
                         initial = tx, initialType = top.type, categories = cats, accounts = accs, compact = false,
                         onSave = { t -> vm.launch { vm.repo.saveTx(t) }; pop() },
                         onDelete = tx?.let { t -> { vm.launch { vm.repo.deleteTx(t) }; pop() } },
+                        onDeleteAll = tx?.groupId?.let { g -> { vm.launch { vm.repo.deleteInstallments(g) }; pop() } },
                         onClose = { pop() },
                         modifier = Modifier.statusBarsPadding().navigationBarsPadding().imePadding()
                             .verticalScroll(rememberScrollState())
@@ -121,6 +154,10 @@ fun AppRoot(vm: MainViewModel, startTab: Int = 0) {
             Route.Categories -> CategoriasScreen(vm, onBack = { pop() })
             Route.Recurrings -> RecurrentesScreen(vm, onBack = { pop() })
             is Route.CategoryDetail -> CategoryDetailScreen(
+                vm, top.id, onBack = { pop() },
+                onOpenTx = { push(Route.Editor(it.id, it.type)) }
+            )
+            is Route.CardDetail -> CardDetailScreen(
                 vm, top.id, onBack = { pop() },
                 onOpenTx = { push(Route.Editor(it.id, it.type)) }
             )

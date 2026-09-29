@@ -3,9 +3,7 @@ package com.nestor.cuentasclaras.widget
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
-import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
-import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -19,6 +17,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import com.nestor.cuentasclaras.capture.QuickText
+import com.nestor.cuentasclaras.data.Tx
 import com.nestor.cuentasclaras.data.TxType
 import com.nestor.cuentasclaras.repo
 import com.nestor.cuentasclaras.ui.screens.TxEditor
@@ -30,18 +30,29 @@ import kotlinx.coroutines.launch
 class QuickAddActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge(
-            statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
-            navigationBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT)
-        )
+        C.applyTheme(this)
         val type = if (intent?.data?.lastPathSegment == TxType.INGRESO) TxType.INGRESO else TxType.GASTO
         val repo = applicationContext.repo
+        // Desde un aviso del banco llegan monto y comercio: se completa la hoja y se adivina la categoría.
+        val prefAmount = intent?.data?.getQueryParameter("amount")?.toDoubleOrNull()
+        val prefNote = intent?.data?.getQueryParameter("note").orEmpty()
+        val openedAt = System.currentTimeMillis()
 
         setContent {
             AppTheme {
                 val cats by remember { repo.db.categories().observe() }.collectAsState(initial = emptyList())
                 val accs by remember { repo.db.accounts().observe() }.collectAsState(initial = emptyList())
                 val scope = rememberCoroutineScope()
+                val prefill = remember(cats, accs) {
+                    if (prefAmount == null || cats.isEmpty()) null
+                    else {
+                        val guess = QuickText.parse("$prefNote 1", cats, accs, forcedType = type)
+                        Tx(
+                            amount = prefAmount, type = type, categoryId = guess?.category?.id ?: 0L,
+                            accountId = guess?.account?.id ?: 0L, date = openedAt, note = prefNote
+                        )
+                    }
+                }
                 Box(
                     Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.55f))
                         .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { finish() },
@@ -55,8 +66,10 @@ class QuickAddActivity : ComponentActivity() {
                             .navigationBarsPadding().imePadding()
                             .verticalScroll(rememberScrollState())
                     ) {
-                        TxEditor(
+                        // key: la hoja se arma de nuevo cuando llegan las categorías (para usar la sugerencia).
+                        key(prefill) { TxEditor(
                             initial = null, initialType = type, categories = cats, accounts = accs, compact = true,
+                            prefill = prefill,
                             onSave = { t ->
                                 scope.launch {
                                     repo.saveTx(t)
@@ -66,7 +79,7 @@ class QuickAddActivity : ComponentActivity() {
                             },
                             onDelete = null,
                             onClose = { finish() }
-                        )
+                        ) }
                     }
                 }
             }

@@ -31,7 +31,7 @@ private data class CatSum(val id: Long, val cat: Category?, val count: Int, val 
 
 @Composable
 fun ResumenScreen(vm: MainViewModel, onSettings: () -> Unit, onOpenCategory: (Long) -> Unit) {
-    val all by vm.txs.collectAsState()
+    val all by vm.txsArs.collectAsState()
     val cats by vm.categories.collectAsState()
     val accs by vm.accounts.collectAsState()
     val catMap = remember(cats) { cats.associateBy { it.id } }

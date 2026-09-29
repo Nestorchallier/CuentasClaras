@@ -1,5 +1,6 @@
 package com.nestor.cuentasclaras.data
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
@@ -7,6 +8,8 @@ import androidx.room.PrimaryKey
 object TxType {
     const val GASTO = "GASTO"
     const val INGRESO = "INGRESO"
+    /** Pasa plata de [Tx.accountId] a [Tx.toAccountId]. No cuenta como gasto ni como ingreso. */
+    const val TRANSFER = "TRANSFER"
 }
 
 @Entity(tableName = "categories")
@@ -27,8 +30,23 @@ data class Account(
     val name: String,
     val emoji: String,
     val initialBalance: Double = 0.0,
-    val position: Int = 0
-)
+    val position: Int = 0,
+    /** Tarjeta de crédito: su saldo es lo que se debe; se paga con una transferencia desde otra cuenta. */
+    @ColumnInfo(defaultValue = "0") val isCard: Boolean = false,
+    /** Día del mes en que cierra el resumen (solo tarjetas). */
+    @ColumnInfo(defaultValue = "0") val closingDay: Int = 0,
+    /** Día del mes en que vence el resumen (solo tarjetas). */
+    @ColumnInfo(defaultValue = "0") val dueDay: Int = 0,
+    /** Moneda de la cuenta: [Currency.ARS] o [Currency.USD]. Sus movimientos están en esa moneda. */
+    val currency: String = Currency.ARS
+) {
+    val isUsd: Boolean get() = currency == Currency.USD
+}
+
+object Currency {
+    const val ARS = "ARS"
+    const val USD = "USD"
+}
 
 @Entity(
     tableName = "transactions",
@@ -44,8 +62,26 @@ data class Tx(
     val date: Long,
     val note: String = "",
     /** Si fue generado por un gasto recurrente */
-    val recurringId: Long? = null
-)
+    val recurringId: Long? = null,
+    /** Solo en transferencias: cuenta que recibe la plata (categoryId queda en 0). */
+    val toAccountId: Long? = null,
+    /** Compra en cuotas: número de esta cuota (1..installments). 0 = no es cuota. */
+    @ColumnInfo(defaultValue = "0") val installment: Int = 0,
+    /**
+     * Cantidad total de cuotas. Al guardar un movimiento nuevo con installments > 1 e installment = 0,
+     * el repositorio lo divide en esa cantidad de cuotas mensuales.
+     */
+    @ColumnInfo(defaultValue = "0") val installments: Int = 0,
+    /** Identifica todas las cuotas de una misma compra. */
+    val groupId: Long? = null,
+    /**
+     * Solo en transferencias entre monedas distintas (compra/venta de dólares): lo que llega a la
+     * cuenta destino, en su moneda. Si es null, llega lo mismo que sale ([amount]).
+     */
+    val toAmount: Double? = null
+) {
+    val isTransfer: Boolean get() = type == TxType.TRANSFER
+}
 
 @Entity(tableName = "recurrings")
 data class Recurring(

@@ -40,11 +40,12 @@ import com.nestor.cuentasclaras.data.TxType
 import com.nestor.cuentasclaras.util.Fmt
 import kotlin.math.max
 
-private val WText = ColorProvider(Color(0xFFF1F5F7))
-private val WSub = ColorProvider(Color(0xFF8C979F))
-private val WGreen = ColorProvider(Color(0xFF34D399))
-private val WRed = ColorProvider(Color(0xFFF87171))
-private val WDark = ColorProvider(Color(0xFF12171B))
+// Colores con versión de día y de noche (ver WColors.kt).
+private val WText = W.Text
+private val WSub = W.Sub
+private val WGreen = W.Green
+private val WRed = W.Red
+private val WDark = W.OnButton
 
 /** Estructura común: carga inicial + se actualiza sola cuando cambian los datos. */
 abstract class SnapshotWidget : GlanceAppWidget() {
@@ -104,7 +105,7 @@ class ActividadWidget : SnapshotWidget() {
                         Text(r.subtitle, style = TextStyle(color = WSub, fontSize = 11.sp), maxLines = 1)
                     }
                     Text(
-                        (if (r.income) "+" else "") + Fmt.money(r.amount),
+                        (if (r.income) "+" else "") + Fmt.money(r.amount, r.account),
                         style = TextStyle(color = if (r.income) WGreen else WText, fontSize = 14.sp, fontWeight = FontWeight.Medium),
                         maxLines = 1
                     )
@@ -133,7 +134,7 @@ class ResumenWidget : SnapshotWidget() {
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(GlanceModifier.size(donutSize), contentAlignment = Alignment.Center) {
-                val bmp = remember(s.slices) { WidgetData.donutBitmap(s.slices) }
+                val bmp = remember(s.slices) { WidgetData.donutBitmap(s.slices, night = W.isNight(context)) }
                 Image(ImageProvider(bmp), contentDescription = "Gastos por categoría", modifier = GlanceModifier.size(donutSize))
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(s.monthName.take(3), style = TextStyle(color = WSub, fontSize = 11.sp))
@@ -183,7 +184,7 @@ class CuentasWidget : SnapshotWidget() {
                     Spacer(GlanceModifier.width(8.dp))
                     Text(a.name, style = TextStyle(color = WText, fontSize = 14.sp), maxLines = 1, modifier = GlanceModifier.defaultWeight())
                     Text(
-                        Fmt.money(a.balance),
+                        Fmt.money(a.balance, a.account),
                         style = TextStyle(color = if (a.balance < 0) WRed else WText, fontSize = 14.sp, fontWeight = FontWeight.Medium),
                         maxLines = 1
                     )

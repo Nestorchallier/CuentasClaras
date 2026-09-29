@@ -13,8 +13,8 @@ android {
         applicationId = "com.nestor.cuentasclaras"
         minSdk = 26
         targetSdk = 35
-        versionCode = 2
-        versionName = "1.1"
+        versionCode = 7
+        versionName = "1.6"
     }
 
     buildTypes {
@@ -30,6 +30,11 @@ android {
     }
     kotlinOptions { jvmTarget = "17" }
     buildFeatures { compose = true }
+}
+
+// Room guarda acá el esquema de cada versión de la base (sirve para revisar las migraciones).
+ksp {
+    arg("room.schemaLocation", "$projectDir/schemas")
 }
 
 dependencies {
@@ -49,6 +54,15 @@ dependencies {
 
     // Widgets de pantalla principal
     implementation("androidx.glance:glance-appwidget:1.1.1")
+
+    // Recordatorios en segundo plano
+    implementation("androidx.work:work-runtime-ktx:2.9.1")
+
+    // Sincronización con la página web (Firebase: login con mail y base Firestore)
+    implementation(platform("com.google.firebase:firebase-bom:33.7.0"))
+    implementation("com.google.firebase:firebase-auth")
+    implementation("com.google.firebase:firebase-firestore")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.9.0")
 
     // Base de datos local
     implementation("androidx.room:room-runtime:2.6.1")
