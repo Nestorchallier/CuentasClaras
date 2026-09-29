@@ -104,55 +104,83 @@ class Repository(private val context: Context, val db: AppDatabase) {
         File(dir, "cuentas_claras_${LocalDate.now()}.csv").apply { writeText("\uFEFF" + sb) }
     }
 
-    /** Importa un CSV con el mismo formato que exporta. Devuelve la cantidad importada. */
-    suspend fun importCsv(text: String): Int = withContext(Dispatchers.IO) {
+    /** Resultado de importar: cuántos se agregaron, cuántos ya estaban y cuántas filas no se pudieron leer. */
+    data class ImportResult(val imported: Int, val duplicates: Int, val failed: Int)
+
+    /**
+     * Importa un CSV con el mismo formato que exporta (también el de Excel en español, con ';' y coma decimal).
+     * Si un movimiento ya existe (misma fecha y hora, monto, tipo, categoría y nota) se saltea,
+     * así reimportar el mismo archivo no duplica nada.
+     */
+    suspend fun importCsv(text: String): ImportResult = withContext(Dispatchers.IO) {
         val lines = text.removePrefix("\uFEFF").lines().filter { it.isNotBlank() }
-        if (lines.size < 2) return@withContext 0
+        if (lines.size < 2) return@withContext ImportResult(0, 0, 0)
+        val sep = detectSeparator(lines.first())
         val cats = db.categories().all().toMutableList()
         val accs = db.accounts().all().toMutableList()
+        // Cuántas veces está cada movimiento en la base (así dos cafés iguales del mismo archivo no se pierden).
+        val existing = db.txs().all().groupingBy { dupKey(it.date, it.amount, it.type, it.categoryId, it.note) }
+            .eachCount().toMutableMap()
         var n = 0
-        for (line in lines.drop(1)) {
-            val f = parseCsvLine(line)
-            if (f.size < 3) continue
-            val date = parseDate(f[0].trim()) ?: continue
-            val type = if (f[1].trim().lowercase().startsWith("ing")) TxType.INGRESO else TxType.GASTO
-            val amount = Fmt.parseOrNull(f[2]) ?: continue
+        var dup = 0
+        var failed = 0
+        db.withTransaction {
+            for (line in lines.drop(1)) {
+                val f = parseCsvLine(line, sep)
+                val date = f.getOrNull(0)?.let { parseDate(it.trim()) }
+                val amount = f.getOrNull(2)?.let { Fmt.parseOrNull(it) }
+                if (f.size < 3 || date == null || amount == null) { failed++; continue }
+                val type = if (f[1].trim().lowercase().startsWith("ing")) TxType.INGRESO else TxType.GASTO
 
-            val catName = f.getOrElse(3) { "" }.trim().ifBlank { "Otros" }
-            var cat = cats.firstOrNull { it.name.equals(catName, true) && it.type == type }
-            if (cat == null) {
-                val c = Category(
-                    name = catName, emoji = if (type == TxType.GASTO) "📦" else "💵",
-                    color = Defaults.palette[cats.size % Defaults.palette.size], type = type, position = cats.size
+                val catName = f.getOrElse(3) { "" }.trim().ifBlank { "Otros" }
+                var cat = cats.firstOrNull { it.name.equals(catName, true) && it.type == type }
+                if (cat == null) {
+                    val c = Category(
+                        name = catName, emoji = if (type == TxType.GASTO) "📦" else "💵",
+                        color = Defaults.palette[cats.size % Defaults.palette.size], type = type, position = cats.size
+                    )
+                    cat = c.copy(id = db.categories().upsert(c))
+                    cats.add(cat)
+                }
+                val note = f.getOrElse(5) { "" }.trim()
+                val key = dupKey(date, abs(amount), type, cat.id, note)
+                val left = existing[key] ?: 0
+                if (left > 0) { existing[key] = left - 1; dup++; continue }
+
+                val accName = f.getOrElse(4) { "" }.trim().ifBlank { "Efectivo" }
+                var acc = accs.firstOrNull { it.name.equals(accName, true) }
+                if (acc == null) {
+                    val a = Account(name = accName, emoji = "🏦", position = accs.size)
+                    acc = a.copy(id = db.accounts().upsert(a))
+                    accs.add(acc)
+                }
+                db.txs().upsert(
+                    Tx(amount = abs(amount), type = type, categoryId = cat.id, accountId = acc.id, date = date, note = note)
                 )
-                cat = c.copy(id = db.categories().upsert(c))
-                cats.add(cat)
+                n++
             }
-            val accName = f.getOrElse(4) { "" }.trim().ifBlank { "Efectivo" }
-            var acc = accs.firstOrNull { it.name.equals(accName, true) }
-            if (acc == null) {
-                val a = Account(name = accName, emoji = "🏦", position = accs.size)
-                acc = a.copy(id = db.accounts().upsert(a))
-                accs.add(acc)
-            }
-            db.txs().upsert(
-                Tx(amount = abs(amount), type = type, categoryId = cat.id, accountId = acc.id,
-                    date = date, note = f.getOrElse(5) { "" }.trim())
-            )
-            n++
         }
         changed()
-        n
+        ImportResult(n, dup, failed)
+    }
+
+    /** El CSV exporta fecha al minuto y montos con centavos: se compara con esa misma precisión. */
+    private fun dupKey(date: Long, amount: Double, type: String, categoryId: Long, note: String) =
+        "${date / 60_000}|${Math.round(abs(amount) * 100)}|$type|$categoryId|${note.trim()}"
+
+    /** Decide el separador una sola vez mirando el encabezado (Excel en español usa ';'). */
+    private fun detectSeparator(header: String): Char {
+        val counts = listOf(',', ';', '\t').associateWith { c -> header.count { it == c } }
+        return counts.maxByOrNull { it.value }?.takeIf { it.value > 0 }?.key ?: ','
     }
 
     private fun csv(s: String) = "\"" + s.replace("\"", "\"\"") + "\""
 
-    private fun parseCsvLine(line: String): List<String> {
+    private fun parseCsvLine(line: String, sep: Char): List<String> {
         val out = mutableListOf<String>()
         val sb = StringBuilder()
         var quoted = false
         var i = 0
-        val sep = if (!line.contains(',') && line.contains(';')) ';' else ','
         while (i < line.length) {
             val c = line[i]
             if (quoted) {

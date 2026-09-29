@@ -37,8 +37,13 @@ fun AjustesScreen(vm: MainViewModel, onBack: () -> Unit, onCategories: () -> Uni
             val text = withContext(Dispatchers.IO) {
                 ctx.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() } ?: ""
             }
-            val n = vm.repo.importCsv(text)
-            Toast.makeText(ctx, "Se importaron $n movimientos", Toast.LENGTH_LONG).show()
+            val r = vm.repo.importCsv(text)
+            val msg = buildString {
+                append("Se importaron ${r.imported} movimientos")
+                if (r.duplicates > 0) append("\n${r.duplicates} ya estaban cargados (se saltearon)")
+                if (r.failed > 0) append("\n${r.failed} filas no se pudieron leer")
+            }
+            Toast.makeText(ctx, msg, Toast.LENGTH_LONG).show()
         }
     }
 
