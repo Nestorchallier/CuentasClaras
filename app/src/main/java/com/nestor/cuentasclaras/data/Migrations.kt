@@ -15,5 +15,17 @@ object Migrations {
         }
     }
 
-    val ALL = arrayOf(M1_2)
+    /** v3: tarjetas de crédito (cierre y vencimiento) y compras en cuotas. */
+    val M2_3 = object : Migration(2, 3) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE accounts ADD COLUMN isCard INTEGER NOT NULL DEFAULT 0")
+            db.execSQL("ALTER TABLE accounts ADD COLUMN closingDay INTEGER NOT NULL DEFAULT 0")
+            db.execSQL("ALTER TABLE accounts ADD COLUMN dueDay INTEGER NOT NULL DEFAULT 0")
+            db.execSQL("ALTER TABLE transactions ADD COLUMN installment INTEGER NOT NULL DEFAULT 0")
+            db.execSQL("ALTER TABLE transactions ADD COLUMN installments INTEGER NOT NULL DEFAULT 0")
+            db.execSQL("ALTER TABLE transactions ADD COLUMN groupId INTEGER")
+        }
+    }
+
+    val ALL = arrayOf(M1_2, M2_3)
 }

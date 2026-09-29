@@ -61,6 +61,7 @@ sealed interface Route {
     data object Categories : Route
     data object Recurrings : Route
     data class CategoryDetail(val id: Long) : Route
+    data class CardDetail(val id: Long) : Route
 }
 
 @Composable
@@ -83,7 +84,7 @@ fun AppRoot(vm: MainViewModel, startTab: Int = 0) {
                     1 -> ResumenScreen(vm, onSettings = { push(Route.Settings) }, onOpenCategory = { push(Route.CategoryDetail(it)) })
                     2 -> PresupuestoScreen(vm, onEditBudgets = { push(Route.Categories) }, onSettings = { push(Route.Settings) })
                     3 -> GeneralScreen(vm, onSettings = { push(Route.Settings) }, onRecurrings = { push(Route.Recurrings) })
-                    else -> CuentasScreen(vm, onSettings = { push(Route.Settings) })
+                    else -> CuentasScreen(vm, onSettings = { push(Route.Settings) }, onOpenCard = { push(Route.CardDetail(it)) })
                 }
                 // Botón + flotante
                 Box(
@@ -106,6 +107,7 @@ fun AppRoot(vm: MainViewModel, startTab: Int = 0) {
                         initial = tx, initialType = top.type, categories = cats, accounts = accs, compact = false,
                         onSave = { t -> vm.launch { vm.repo.saveTx(t) }; pop() },
                         onDelete = tx?.let { t -> { vm.launch { vm.repo.deleteTx(t) }; pop() } },
+                        onDeleteAll = tx?.groupId?.let { g -> { vm.launch { vm.repo.deleteInstallments(g) }; pop() } },
                         onClose = { pop() },
                         modifier = Modifier.statusBarsPadding().navigationBarsPadding().imePadding()
                             .verticalScroll(rememberScrollState())
@@ -121,6 +123,10 @@ fun AppRoot(vm: MainViewModel, startTab: Int = 0) {
             Route.Categories -> CategoriasScreen(vm, onBack = { pop() })
             Route.Recurrings -> RecurrentesScreen(vm, onBack = { pop() })
             is Route.CategoryDetail -> CategoryDetailScreen(
+                vm, top.id, onBack = { pop() },
+                onOpenTx = { push(Route.Editor(it.id, it.type)) }
+            )
+            is Route.CardDetail -> CardDetailScreen(
                 vm, top.id, onBack = { pop() },
                 onOpenTx = { push(Route.Editor(it.id, it.type)) }
             )

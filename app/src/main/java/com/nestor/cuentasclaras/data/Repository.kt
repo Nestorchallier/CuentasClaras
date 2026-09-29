@@ -29,8 +29,41 @@ class Repository(private val context: Context, val db: AppDatabase) {
     }
 
     // ---------- Movimientos ----------
-    suspend fun saveTx(t: Tx) { db.txs().upsert(t); changed() }
+    suspend fun saveTx(t: Tx) {
+        if (t.id == 0L && t.installments > 1 && t.installment == 0) saveInstallments(t)
+        else db.txs().upsert(t)
+        changed()
+    }
     suspend fun deleteTx(t: Tx) { db.txs().delete(t); changed() }
+
+    /** Borra todas las cuotas de una compra. */
+    suspend fun deleteInstallments(groupId: Long) { db.txs().deleteGroup(groupId); changed() }
+
+    /**
+     * Compra en cuotas: [t].amount es el total. Se crea una cuota por mes desde la fecha de compra,
+     * cada una con su parte (la última ajusta los centavos para que la suma dé exacto).
+     */
+    private suspend fun saveInstallments(t: Tx) {
+        val n = t.installments
+        val cents = Math.round(t.amount * 100)
+        val each = cents / n
+        val groupId = System.currentTimeMillis()
+        val start = Dates.localDate(t.date)
+        val time = Dates.localTime(t.date)
+        val base = t.note.ifBlank { "Compra" }
+        db.withTransaction {
+            for (k in 1..n) {
+                val part = if (k == n) cents - each * (n - 1) else each
+                db.txs().upsert(
+                    t.copy(
+                        id = 0, amount = part / 100.0, installment = k, installments = n, groupId = groupId,
+                        date = Dates.toMillis(start.plusMonths((k - 1).toLong()), time),
+                        note = "$base (cuota $k/$n)"
+                    )
+                )
+            }
+        }
+    }
     suspend fun clearTransactions() { db.txs().clear(); changed() }
 
     // ---------- Categorías y cuentas ----------

@@ -1,5 +1,6 @@
 package com.nestor.cuentasclaras.data
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
@@ -29,7 +30,13 @@ data class Account(
     val name: String,
     val emoji: String,
     val initialBalance: Double = 0.0,
-    val position: Int = 0
+    val position: Int = 0,
+    /** Tarjeta de crédito: su saldo es lo que se debe; se paga con una transferencia desde otra cuenta. */
+    @ColumnInfo(defaultValue = "0") val isCard: Boolean = false,
+    /** Día del mes en que cierra el resumen (solo tarjetas). */
+    @ColumnInfo(defaultValue = "0") val closingDay: Int = 0,
+    /** Día del mes en que vence el resumen (solo tarjetas). */
+    @ColumnInfo(defaultValue = "0") val dueDay: Int = 0
 )
 
 @Entity(
@@ -48,7 +55,16 @@ data class Tx(
     /** Si fue generado por un gasto recurrente */
     val recurringId: Long? = null,
     /** Solo en transferencias: cuenta que recibe la plata (categoryId queda en 0). */
-    val toAccountId: Long? = null
+    val toAccountId: Long? = null,
+    /** Compra en cuotas: número de esta cuota (1..installments). 0 = no es cuota. */
+    @ColumnInfo(defaultValue = "0") val installment: Int = 0,
+    /**
+     * Cantidad total de cuotas. Al guardar un movimiento nuevo con installments > 1 e installment = 0,
+     * el repositorio lo divide en esa cantidad de cuotas mensuales.
+     */
+    @ColumnInfo(defaultValue = "0") val installments: Int = 0,
+    /** Identifica todas las cuotas de una misma compra. */
+    val groupId: Long? = null
 ) {
     val isTransfer: Boolean get() = type == TxType.TRANSFER
 }

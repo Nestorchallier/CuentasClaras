@@ -53,7 +53,9 @@ fun TxEditor(
     onSave: (Tx) -> Unit,
     onDelete: (() -> Unit)?,
     onClose: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    /** Si el movimiento es una cuota: borra todas las cuotas de esa compra. */
+    onDeleteAll: (() -> Unit)? = null
 ) {
     var type by remember { mutableStateOf(initial?.type ?: initialType) }
     var amount by remember { mutableStateOf(initial?.let { Fmt.plain(it.amount) } ?: "") }
@@ -62,10 +64,14 @@ fun TxEditor(
     var date by remember { mutableStateOf(initial?.let { Dates.localDate(it.date) } ?: LocalDate.now()) }
     var note by remember { mutableStateOf(initial?.note ?: "") }
     var pickDate by remember { mutableStateOf(false) }
+    var cuotas by remember { mutableIntStateOf(1) }
+    var askDelete by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     val haptic = LocalHapticFeedback.current
     val today = LocalDate.now()
     val typeCats = categories.filter { it.type == type }
+    // Cuotas: solo al cargar un gasto nuevo con una tarjeta de crédito.
+    val canInstallments = initial == null && type == TxType.GASTO && accounts.firstOrNull { it.id == accId }?.isCard == true
 
     LaunchedEffect(accounts) {
         // Por defecto, la cuenta del sueldo (si hay una marcada); si no, la primera.
@@ -110,7 +116,11 @@ fun TxEditor(
                         id = initial?.id ?: 0, amount = v, type = type,
                         categoryId = catId!!, accountId = accId!!,
                         date = Dates.toMillis(date, time), note = note.trim(),
-                        recurringId = initial?.recurringId
+                        recurringId = initial?.recurringId,
+                        toAccountId = initial?.toAccountId,
+                        installment = initial?.installment ?: 0,
+                        installments = initial?.installments ?: if (canInstallments && cuotas > 1) cuotas else 0,
+                        groupId = initial?.groupId
                     )
                 )
             }
@@ -137,7 +147,7 @@ fun TxEditor(
             )
             if (onDelete != null) {
                 Spacer(Modifier.width(12.dp))
-                RoundIcon(Icons.Filled.Delete, "Eliminar", onClick = onDelete)
+                RoundIcon(Icons.Filled.Delete, "Eliminar") { if (onDeleteAll != null) askDelete = true else onDelete() }
             }
         }
 
@@ -181,6 +191,24 @@ fun TxEditor(
             }
         }
 
+        if (canInstallments) {
+            Spacer(Modifier.height(10.dp))
+            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf(1, 3, 6, 9, 12, 18, 24).forEach { n ->
+                    Pill(if (n == 1) "1 pago" else "$n cuotas", selected = cuotas == n) { cuotas = n }
+                }
+            }
+            val total = amount.replace(',', '.').toDoubleOrNull() ?: 0.0
+            if (cuotas > 1 && total > 0) {
+                Spacer(Modifier.height(4.dp))
+                Text("$cuotas cuotas de ${Fmt.money(total / cuotas)} (una por mes)", color = C.Sub, fontSize = 13.sp)
+            }
+        }
+        if (initial != null && initial.installments > 1) {
+            Spacer(Modifier.height(6.dp))
+            Text("Cuota ${initial.installment} de ${initial.installments}", color = C.Sub, fontSize = 13.sp)
+        }
+
         Spacer(Modifier.height(10.dp))
         Field(note, { note = it }, "Nota (opcional)")
         error?.let {
@@ -192,6 +220,24 @@ fun TxEditor(
         Keypad(compact) { press(it) }
         Spacer(Modifier.height(12.dp))
         PrimaryButton(if (initial == null) "Guardar" else "Guardar cambios") { save() }
+    }
+
+    if (askDelete && onDelete != null) {
+        AlertDialog(
+            onDismissRequest = { askDelete = false },
+            containerColor = C.Card,
+            title = { Text("Borrar cuota", color = C.Text) },
+            text = { Text("¿Querés borrar solo esta cuota o todas las cuotas de la compra?", color = C.Sub) },
+            confirmButton = {
+                TextButton(onClick = { askDelete = false; onDeleteAll?.invoke() }) { Text("Todas", color = C.Red) }
+            },
+            dismissButton = {
+                Row {
+                    TextButton(onClick = { askDelete = false; onDelete() }) { Text("Solo esta", color = C.Red) }
+                    TextButton(onClick = { askDelete = false }) { Text("Cancelar", color = C.Sub) }
+                }
+            }
+        )
     }
 
     if (pickDate) {

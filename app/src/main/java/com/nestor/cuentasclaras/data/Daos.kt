@@ -66,6 +66,9 @@ interface TxDao {
     @Query("DELETE FROM transactions")
     suspend fun clear()
 
+    @Query("DELETE FROM transactions WHERE groupId = :groupId")
+    suspend fun deleteGroup(groupId: Long)
+
     @Query("UPDATE transactions SET accountId = :to WHERE accountId = :from")
     suspend fun moveAccount(from: Long, to: Long)
 

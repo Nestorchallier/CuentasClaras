@@ -32,6 +32,7 @@ import com.nestor.cuentasclaras.ui.MainViewModel
 import com.nestor.cuentasclaras.ui.components.*
 import com.nestor.cuentasclaras.ui.theme.C
 import com.nestor.cuentasclaras.util.Balances
+import com.nestor.cuentasclaras.util.CardCycle
 import com.nestor.cuentasclaras.util.Dates
 import com.nestor.cuentasclaras.util.Fmt
 import com.nestor.cuentasclaras.util.Prefs
@@ -40,7 +41,7 @@ import java.time.LocalDate
 import java.time.YearMonth
 
 @Composable
-fun CuentasScreen(vm: MainViewModel, onSettings: () -> Unit) {
+fun CuentasScreen(vm: MainViewModel, onSettings: () -> Unit, onOpenCard: (Long) -> Unit) {
     val all by vm.txs.collectAsState()
     val accs by vm.accounts.collectAsState()
     val recs by vm.recurrings.collectAsState()
@@ -75,7 +76,7 @@ fun CuentasScreen(vm: MainViewModel, onSettings: () -> Unit) {
             items(accs, key = { it.id }) { a ->
                 Row(
                     Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(C.Card)
-                        .clickable { editing = a }.padding(14.dp),
+                        .clickable { if (a.isCard) onOpenCard(a.id) else editing = a }.padding(14.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Box(Modifier.size(52.dp).clip(RoundedCornerShape(16.dp)).background(C.CardHi), contentAlignment = Alignment.Center) {
@@ -89,6 +90,17 @@ fun CuentasScreen(vm: MainViewModel, onSettings: () -> Unit) {
                         )
                         val b = balances[a.id] ?: 0.0
                         Text(Fmt.money(b), color = if (b < 0) C.Red else C.Text, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                        if (a.isCard) {
+                            val next = remember(all, a) { CardCycle.upcoming(a, all, 1).first() }
+                            val pay = remember(all, a) { CardCycle.toPay(a, all) }
+                            if (pay != null) {
+                                Text("A pagar ${Fmt.money(pay.total)} · vence ${Fmt.shortDate(pay.due)}", color = C.Red, fontSize = 12.sp)
+                            }
+                            Text(
+                                "Próximo resumen ${Fmt.money(next.total)} · cierra ${Fmt.shortDate(next.closing)}",
+                                color = C.Sub, fontSize = 12.sp
+                            )
+                        }
                     }
                 }
             }
@@ -181,6 +193,9 @@ fun AccountDialog(
     onDelete: (account: Account, moveTo: Long?) -> Unit
 ) {
     var main by remember { mutableStateOf(isMain) }
+    var isCard by remember { mutableStateOf(initial?.isCard ?: false) }
+    var closing by remember { mutableStateOf(initial?.closingDay?.takeIf { it > 0 }?.toString() ?: "") }
+    var due by remember { mutableStateOf(initial?.dueDay?.takeIf { it > 0 }?.toString() ?: "") }
     var name by remember { mutableStateOf(initial?.name ?: "") }
     var emoji by remember { mutableStateOf(initial?.emoji ?: "🏦") }
     var balance by remember { mutableStateOf(initial?.initialBalance?.let { Fmt.plain(it) } ?: "") }
@@ -198,6 +213,20 @@ fun AccountDialog(
                 Field(name, { name = it }, "Nombre (ej: Sueldo Cash Market)")
                 Field(balance, { balance = it }, "Saldo inicial", number = true)
                 Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Tarjeta de crédito", color = C.Text, fontSize = 15.sp)
+                        Text("Permite compras en cuotas y muestra cada resumen.", color = C.Sub, fontSize = 12.sp)
+                    }
+                    Switch(isCard, { isCard = it; if (it) main = false }, colors = SwitchDefaults.colors(checkedTrackColor = C.Green, checkedThumbColor = C.Text))
+                }
+                if (isCard) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Field(closing, { closing = it.filter(Char::isDigit).take(2) }, "Día de cierre", Modifier.weight(1f), number = true)
+                        Field(due, { due = it.filter(Char::isDigit).take(2) }, "Día de vencimiento", Modifier.weight(1f), number = true)
+                    }
+                    Text("Para pagarla, hacé una transferencia desde tu banco a la tarjeta.", color = C.Sub, fontSize = 12.sp)
+                }
+                if (!isCard) Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Text("Cuenta del sueldo", color = C.Text, fontSize = 15.sp)
                         Text("Acá entra el sueldo y de acá salen los gastos por defecto.", color = C.Sub, fontSize = 12.sp)
@@ -223,7 +252,15 @@ fun AccountDialog(
             TextButton(onClick = {
                 if (name.isNotBlank()) {
                     val base = initial ?: Account(name = "", emoji = "")
-                    onSave(base.copy(name = name.trim(), emoji = emoji.ifBlank { "🏦" }, initialBalance = Fmt.parse(balance)), main)
+                    onSave(
+                        base.copy(
+                            name = name.trim(), emoji = emoji.ifBlank { "🏦" }, initialBalance = Fmt.parse(balance),
+                            isCard = isCard,
+                            closingDay = if (isCard) (closing.toIntOrNull() ?: 0).coerceIn(0, 31) else 0,
+                            dueDay = if (isCard) (due.toIntOrNull() ?: 0).coerceIn(0, 31) else 0
+                        ),
+                        main && !isCard
+                    )
                 }
             }) { Text("Guardar", color = C.Teal) }
         },

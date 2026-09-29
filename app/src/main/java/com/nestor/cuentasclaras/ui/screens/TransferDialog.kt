@@ -32,11 +32,16 @@ fun TransferDialog(
     accounts: List<Account>,
     onDismiss: () -> Unit,
     onSave: (Tx) -> Unit,
-    onDelete: ((Tx) -> Unit)?
+    onDelete: ((Tx) -> Unit)?,
+    /** Para "Pagar tarjeta": cuenta destino y monto sugeridos. */
+    presetTo: Long? = null,
+    presetAmount: Double? = null
 ) {
-    var from by remember { mutableStateOf(initial?.accountId ?: accounts.getOrNull(0)?.id) }
-    var to by remember { mutableStateOf(initial?.toAccountId ?: accounts.getOrNull(1)?.id) }
-    var amount by remember { mutableStateOf(initial?.let { Fmt.plain(it.amount) } ?: "") }
+    var to by remember { mutableStateOf(initial?.toAccountId ?: presetTo ?: accounts.getOrNull(1)?.id) }
+    var from by remember {
+        mutableStateOf(initial?.accountId ?: accounts.firstOrNull { it.id != to && !it.isCard }?.id ?: accounts.getOrNull(0)?.id)
+    }
+    var amount by remember { mutableStateOf(initial?.let { Fmt.plain(it.amount) } ?: presetAmount?.let { Fmt.plain(it) } ?: "") }
     var date by remember { mutableStateOf(initial?.let { Dates.localDate(it.date) } ?: LocalDate.now()) }
     var note by remember { mutableStateOf(initial?.note ?: "") }
     var pickDate by remember { mutableStateOf(false) }
