@@ -104,7 +104,7 @@ class ActividadWidget : SnapshotWidget() {
                         Text(r.subtitle, style = TextStyle(color = WSub, fontSize = 11.sp), maxLines = 1)
                     }
                     Text(
-                        (if (r.income) "+" else "") + Fmt.money(r.amount),
+                        (if (r.income) "+" else "") + Fmt.money(r.amount, r.account),
                         style = TextStyle(color = if (r.income) WGreen else WText, fontSize = 14.sp, fontWeight = FontWeight.Medium),
                         maxLines = 1
                     )
@@ -183,7 +183,7 @@ class CuentasWidget : SnapshotWidget() {
                     Spacer(GlanceModifier.width(8.dp))
                     Text(a.name, style = TextStyle(color = WText, fontSize = 14.sp), maxLines = 1, modifier = GlanceModifier.defaultWeight())
                     Text(
-                        Fmt.money(a.balance),
+                        Fmt.money(a.balance, a.account),
                         style = TextStyle(color = if (a.balance < 0) WRed else WText, fontSize = 14.sp, fontWeight = FontWeight.Medium),
                         maxLines = 1
                     )

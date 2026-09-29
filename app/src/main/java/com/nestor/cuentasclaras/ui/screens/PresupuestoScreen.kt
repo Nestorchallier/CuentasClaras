@@ -25,7 +25,7 @@ import com.nestor.cuentasclaras.util.Fmt
 
 @Composable
 fun PresupuestoScreen(vm: MainViewModel, onEditBudgets: () -> Unit, onSettings: () -> Unit) {
-    val all by vm.txs.collectAsState()
+    val all by vm.txsArs.collectAsState()
     val cats by vm.categories.collectAsState()
     val month = vm.month
     val gastos = remember(all, month) { Dates.inMonth(all, month).filter { it.type == TxType.GASTO } }

@@ -130,7 +130,8 @@ fun TxEditor(
     val display = run {
         val intPart = amount.substringBefore(',').ifEmpty { "0" }
         val dec = if (amount.contains(',')) "," + amount.substringAfter(',') else ""
-        "${Prefs.currency} ${Fmt.groupInt(intPart)}$dec"
+        val symbol = if (accounts.firstOrNull { it.id == accId }?.isUsd == true) "US$" else Prefs.currency
+        "$symbol ${Fmt.groupInt(intPart)}$dec"
     }
 
     Column(modifier.fillMaxWidth().padding(16.dp)) {
@@ -187,7 +188,7 @@ fun TxEditor(
             Pill("Ayer", selected = date == yesterday) { date = yesterday }
             Pill(if (other) "📅 ${Fmt.shortDate(date)}" else "📅 Otra fecha", selected = other) { pickDate = true }
             if (accounts.size > 1) {
-                accounts.forEach { a -> Pill("${a.emoji} ${a.name}", selected = a.id == accId) { accId = a.id } }
+                accounts.forEach { a -> Pill("${a.emoji} ${a.name}" + if (a.isUsd) " (US$)" else "", selected = a.id == accId) { accId = a.id } }
             }
         }
 
@@ -201,7 +202,7 @@ fun TxEditor(
             val total = amount.replace(',', '.').toDoubleOrNull() ?: 0.0
             if (cuotas > 1 && total > 0) {
                 Spacer(Modifier.height(4.dp))
-                Text("$cuotas cuotas de ${Fmt.money(total / cuotas)} (una por mes)", color = C.Sub, fontSize = 13.sp)
+                Text("$cuotas cuotas de ${Fmt.money(total / cuotas, accounts.firstOrNull { it.id == accId })} (una por mes)", color = C.Sub, fontSize = 13.sp)
             }
         }
         if (initial != null && initial.installments > 1) {

@@ -16,10 +16,15 @@ object Balances {
                 TxType.GASTO -> m.computeIfPresent(t.accountId) { _, v -> v - t.amount }
                 TxType.TRANSFER -> {
                     m.computeIfPresent(t.accountId) { _, v -> v - t.amount }
-                    t.toAccountId?.let { to -> m.computeIfPresent(to) { _, v -> v + t.amount } }
+                    // Si es compra/venta de dólares, a la otra cuenta llega toAmount (en su moneda).
+                    t.toAccountId?.let { to -> m.computeIfPresent(to) { _, v -> v + (t.toAmount ?: t.amount) } }
                 }
             }
         }
         return m
     }
+
+    /** Suma de saldos en pesos: las cuentas en dólares se convierten con la cotización elegida. */
+    fun totalArs(accounts: List<Account>, balances: Map<Long, Double>): Double =
+        accounts.sumOf { Money.toArs(balances[it.id] ?: 0.0, it) }
 }

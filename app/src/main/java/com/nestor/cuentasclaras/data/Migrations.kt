@@ -27,5 +27,13 @@ object Migrations {
         }
     }
 
-    val ALL = arrayOf(M1_2, M2_3)
+    /** v4: pesos y dólares (moneda de cada cuenta) y compra/venta de dólares entre cuentas. */
+    val M3_4 = object : Migration(3, 4) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE accounts ADD COLUMN currency TEXT NOT NULL DEFAULT 'ARS'")
+            db.execSQL("ALTER TABLE transactions ADD COLUMN toAmount REAL")
+        }
+    }
+
+    val ALL = arrayOf(M1_2, M2_3, M3_4)
 }

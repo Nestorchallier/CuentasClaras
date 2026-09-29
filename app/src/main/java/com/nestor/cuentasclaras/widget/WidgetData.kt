@@ -16,15 +16,20 @@ import com.nestor.cuentasclaras.ui.MainActivity
 import com.nestor.cuentasclaras.util.Balances
 import com.nestor.cuentasclaras.util.Dates
 import com.nestor.cuentasclaras.util.Fmt
+import com.nestor.cuentasclaras.util.Money
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import java.time.LocalDate
 import java.time.YearMonth
 import kotlin.math.max
 
-data class RecentItem(val emoji: String, val title: String, val subtitle: String, val amount: Double, val income: Boolean)
+data class RecentItem(
+    val emoji: String, val title: String, val subtitle: String, val amount: Double, val income: Boolean,
+    /** Cuenta del movimiento (para mostrar US$ si es en dólares). */
+    val account: Account? = null
+)
 data class CatSlice(val emoji: String, val name: String, val color: Long, val amount: Double)
-data class AccItem(val emoji: String, val name: String, val balance: Double)
+data class AccItem(val emoji: String, val name: String, val balance: Double, val account: Account? = null, val balanceArs: Double = balance)
 
 data class Snapshot(
     val monthName: String,
@@ -38,7 +43,8 @@ data class Snapshot(
     val slices: List<CatSlice> = emptyList(),
     val accounts: List<AccItem> = emptyList()
 ) {
-    val totalBalance: Double get() = accounts.sumOf { it.balance }
+    /** Saldo total en pesos (las cuentas en dólares, convertidas). */
+    val totalBalance: Double get() = accounts.sumOf { it.balanceArs }
 }
 
 object WidgetData {
@@ -47,7 +53,8 @@ object WidgetData {
         val today = LocalDate.now()
         val catMap = cats.associateBy { it.id }
         val accMap = accs.associateBy { it.id }
-        val month = Dates.inMonth(txs, ym)
+        // Gastos e ingresos en pesos (lo de cuentas en dólares, convertido).
+        val month = Dates.inMonth(Money.inArs(txs, accs), ym)
         val gastos = month.filter { it.type == TxType.GASTO }
         val daily = DoubleArray(ym.lengthOfMonth())
         gastos.forEach { daily[Dates.day(it.date) - 1] += it.amount }
@@ -62,7 +69,8 @@ object WidgetData {
                 title = t.note.ifBlank { if (t.isTransfer) "Transferencia" else c?.name ?: "Sin categoría" },
                 subtitle = "${Dates.dayLabel(Dates.localDate(t.date))} · $accText",
                 amount = t.amount,
-                income = t.type == TxType.INGRESO
+                income = t.type == TxType.INGRESO,
+                account = accMap[t.accountId]
             )
         }.toList()
 
@@ -72,7 +80,10 @@ object WidgetData {
         }.sortedByDescending { it.amount }
 
         val byId = Balances.of(accs, txs)
-        val accounts = accs.map { a -> AccItem(a.emoji, a.name, byId[a.id] ?: 0.0) }
+        val accounts = accs.map { a ->
+            val b = byId[a.id] ?: 0.0
+            AccItem(a.emoji, a.name, b, a, Money.toArs(b, a))
+        }
 
         return Snapshot(
             monthName = Fmt.monthName(ym.monthValue),

@@ -17,6 +17,9 @@ import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
+import android.widget.Toast
+import androidx.compose.ui.platform.LocalContext
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -24,6 +27,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.nestor.cuentasclaras.data.Account
+import com.nestor.cuentasclaras.data.Currency
 import com.nestor.cuentasclaras.data.Defaults
 import com.nestor.cuentasclaras.data.Recurring
 import com.nestor.cuentasclaras.data.Tx
@@ -35,6 +39,7 @@ import com.nestor.cuentasclaras.util.Balances
 import com.nestor.cuentasclaras.util.CardCycle
 import com.nestor.cuentasclaras.util.Dates
 import com.nestor.cuentasclaras.util.Fmt
+import com.nestor.cuentasclaras.util.Money
 import com.nestor.cuentasclaras.util.Prefs
 import com.nestor.cuentasclaras.util.Projection
 import java.time.LocalDate
@@ -52,7 +57,13 @@ fun CuentasScreen(vm: MainViewModel, onSettings: () -> Unit, onOpenCard: (Long) 
     val transfers = remember(all) { all.filter { it.isTransfer }.take(10) }
     val accMap = remember(accs) { accs.associateBy { it.id } }
     val balances = remember(all, accs) { Balances.of(accs, all) }
-    val total = balances.values.sum()
+    val total = Balances.totalArs(accs, balances)
+    val hasUsd = accs.any { it.isUsd }
+    val scope = rememberCoroutineScope()
+    val ctx = LocalContext.current
+    var refreshing by remember { mutableStateOf(false) }
+    // Al entrar, actualizar la cotización si hay cuentas en dólares.
+    LaunchedEffect(hasUsd) { if (hasUsd) { refreshing = true; Money.refresh(); refreshing = false } }
 
     GradientBg(C.TopNeutral) {
         LazyColumn(
@@ -66,12 +77,27 @@ fun CuentasScreen(vm: MainViewModel, onSettings: () -> Unit, onOpenCard: (Long) 
                     Column(Modifier.align(Alignment.TopCenter), horizontalAlignment = Alignment.CenterHorizontally) {
                         Text("Saldo total", color = C.Sub, fontSize = 15.sp)
                         Text(Fmt.money(total), color = if (total < 0) C.Red else C.Text, fontSize = 34.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+                        if (hasUsd) {
+                            Text("en pesos, con el dólar ${Money.typeName}", color = C.Sub, fontSize = 12.sp)
+                        }
                     }
                     RoundIcon(Icons.Filled.Add, "Nueva cuenta", Modifier.align(Alignment.TopEnd)) { creating = true }
                 }
             }
+            if (hasUsd) {
+                item {
+                    RateCard(refreshing) {
+                        scope.launch {
+                            refreshing = true
+                            val ok = Money.refresh()
+                            refreshing = false
+                            if (!ok) Toast.makeText(ctx, "No se pudo actualizar la cotización (¿sin internet?)", Toast.LENGTH_LONG).show()
+                        }
+                    }
+                }
+            }
             item {
-                SueldoCard(all, recs, accs.firstOrNull { it.id == Prefs.mainAccountId }, balances)
+                SueldoCard(all, recs, accs.firstOrNull { it.id == Prefs.mainAccountId }, accs, balances)
             }
             items(accs, key = { it.id }) { a ->
                 Row(
@@ -89,15 +115,18 @@ fun CuentasScreen(vm: MainViewModel, onSettings: () -> Unit, onOpenCard: (Long) 
                             color = C.Sub, fontSize = 15.sp
                         )
                         val b = balances[a.id] ?: 0.0
-                        Text(Fmt.money(b), color = if (b < 0) C.Red else C.Text, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                        Text(Fmt.money(b, a), color = if (b < 0) C.Red else C.Text, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                        if (a.isUsd && Money.usdToArs > 0) {
+                            Text("≈ ${Fmt.money(Money.toArs(b, a))}", color = C.Sub, fontSize = 12.sp)
+                        }
                         if (a.isCard) {
                             val next = remember(all, a) { CardCycle.upcoming(a, all, 1).first() }
                             val pay = remember(all, a) { CardCycle.toPay(a, all) }
                             if (pay != null) {
-                                Text("A pagar ${Fmt.money(pay.total)} · vence ${Fmt.shortDate(pay.due)}", color = C.Red, fontSize = 12.sp)
+                                Text("A pagar ${Fmt.money(pay.total, a)} · vence ${Fmt.shortDate(pay.due)}", color = C.Red, fontSize = 12.sp)
                             }
                             Text(
-                                "Próximo resumen ${Fmt.money(next.total)} · cierra ${Fmt.shortDate(next.closing)}",
+                                "Próximo resumen ${Fmt.money(next.total, a)} · cierra ${Fmt.shortDate(next.closing)}",
                                 color = C.Sub, fontSize = 12.sp
                             )
                         }
@@ -182,7 +211,13 @@ private fun TransferRow(t: Tx, from: Account?, to: Account?, onClick: () -> Unit
             Text(sub, color = C.Sub, fontSize = 12.sp, maxLines = 1)
         }
         Spacer(Modifier.width(8.dp))
-        Text(Fmt.money(t.amount), color = C.Blue, fontSize = 16.sp, fontWeight = FontWeight.Medium)
+        Column(horizontalAlignment = Alignment.End) {
+            Text(Fmt.money(t.amount, from), color = C.Blue, fontSize = 16.sp, fontWeight = FontWeight.Medium)
+            // Compra/venta de dólares: mostrar también lo que llegó.
+            if (t.toAmount != null && from?.currency != to?.currency) {
+                Text("→ ${Fmt.money(t.toAmount, to)}", color = C.Sub, fontSize = 12.sp)
+            }
+        }
     }
 }
 
@@ -194,6 +229,7 @@ fun AccountDialog(
 ) {
     var main by remember { mutableStateOf(isMain) }
     var isCard by remember { mutableStateOf(initial?.isCard ?: false) }
+    var usd by remember { mutableStateOf(initial?.isUsd ?: false) }
     var closing by remember { mutableStateOf(initial?.closingDay?.takeIf { it > 0 }?.toString() ?: "") }
     var due by remember { mutableStateOf(initial?.dueDay?.takeIf { it > 0 }?.toString() ?: "") }
     var name by remember { mutableStateOf(initial?.name ?: "") }
@@ -211,7 +247,11 @@ fun AccountDialog(
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 EmojiPicker(emoji, Defaults.accountEmojis) { emoji = it }
                 Field(name, { name = it }, "Nombre (ej: Sueldo Cash Market)")
-                Field(balance, { balance = it }, "Saldo inicial", number = true)
+                ChoiceRow(listOf(0L to "$ Pesos", 1L to "US$ Dólares"), if (usd) 1L else 0L) { usd = it == 1L }
+                if (initial != null && usd != initial.isUsd && usage > 0) {
+                    Text("Ojo: los movimientos que ya tiene la cuenta no se convierten, solo cambia la moneda en que se leen.", color = C.Red, fontSize = 12.sp)
+                }
+                Field(balance, { balance = it }, if (usd) "Saldo inicial (US$)" else "Saldo inicial", number = true)
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Text("Tarjeta de crédito", color = C.Text, fontSize = 15.sp)
@@ -256,6 +296,7 @@ fun AccountDialog(
                         base.copy(
                             name = name.trim(), emoji = emoji.ifBlank { "🏦" }, initialBalance = Fmt.parse(balance),
                             isCard = isCard,
+                            currency = if (usd) Currency.USD else Currency.ARS,
                             closingDay = if (isCard) (closing.toIntOrNull() ?: 0).coerceIn(0, 31) else 0,
                             dueDay = if (isCard) (due.toIntOrNull() ?: 0).coerceIn(0, 31) else 0
                         ),
@@ -283,31 +324,34 @@ fun AccountDialog(
  * y cuánto queda libre por día hasta fin de mes. Sin cuenta del sueldo marcada, suma todas las cuentas.
  */
 @Composable
-private fun SueldoCard(all: List<Tx>, recs: List<Recurring>, main: Account?, balances: Map<Long, Double>) {
+private fun SueldoCard(all: List<Tx>, recs: List<Recurring>, main: Account?, accounts: List<Account>, balances: Map<Long, Double>) {
     val ym = YearMonth.now()
     fun mine(accountId: Long) = main == null || accountId == main.id
-    val month = Dates.inMonth(all, ym)
+    // Si se suman todas las cuentas, lo que está en dólares se pasa a pesos.
+    val month = Dates.inMonth(if (main == null) Money.inArs(all, accounts) else all, ym)
     val cobrado = month.filter { it.type == TxType.INGRESO && mine(it.accountId) }.sumOf { it.amount }
     val gastado = month.filter { it.type == TxType.GASTO && mine(it.accountId) }.sumOf { it.amount }
     // Recurrentes de gasto que todavía no se generaron este mes (alquiler, servicios, etc.)
-    val fijos = Projection.recurrings(ym, recs).filter { it.type == TxType.GASTO && mine(it.accountId) }.sumOf { it.amount }
+    val proj = Projection.recurrings(ym, recs)
+    val fijos = (if (main == null) Money.inArs(proj, accounts) else proj)
+        .filter { it.type == TxType.GASTO && mine(it.accountId) }.sumOf { it.amount }
     val libre = cobrado - gastado - fijos
     val diasRestantes = ym.lengthOfMonth() - LocalDate.now().dayOfMonth + 1
     CardBox {
         Text(if (main != null) "${main.emoji} ${main.name} · este mes" else "Este mes · todas las cuentas", color = C.Sub, fontSize = 14.sp)
         Spacer(Modifier.height(6.dp))
         Text("Te queda", color = C.Sub, fontSize = 13.sp)
-        Text(Fmt.money(libre), color = if (libre < 0) C.Red else C.Green, fontSize = 30.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+        Text(Fmt.money(libre, main), color = if (libre < 0) C.Red else C.Green, fontSize = 30.sp, fontWeight = FontWeight.Bold, maxLines = 1)
         if (cobrado > 0 && libre > 0) {
-            Text("${Fmt.money(libre / diasRestantes)} por día hasta fin de mes", color = C.Sub, fontSize = 13.sp)
+            Text("${Fmt.money(libre / diasRestantes, main)} por día hasta fin de mes", color = C.Sub, fontSize = 13.sp)
         }
         Spacer(Modifier.height(10.dp))
         ProgressBar(if (cobrado > 0) ((gastado + fijos) / cobrado).toFloat() else 0f, if (libre < 0) C.Red else C.Teal)
         Spacer(Modifier.height(10.dp))
-        SueldoLine("Cobrado (sueldo e ingresos)", Fmt.money(cobrado), C.Green)
-        SueldoLine("Gastado", "− " + Fmt.money(gastado), C.Text)
-        if (fijos > 0) SueldoLine("Gastos fijos por pagar", "− " + Fmt.money(fijos), C.Text)
-        if (main != null) SueldoLine("Saldo actual de la cuenta", Fmt.money(balances[main.id] ?: 0.0), C.Text)
+        SueldoLine("Cobrado (sueldo e ingresos)", Fmt.money(cobrado, main), C.Green)
+        SueldoLine("Gastado", "− " + Fmt.money(gastado, main), C.Text)
+        if (fijos > 0) SueldoLine("Gastos fijos por pagar", "− " + Fmt.money(fijos, main), C.Text)
+        if (main != null) SueldoLine("Saldo actual de la cuenta", Fmt.money(balances[main.id] ?: 0.0, main), C.Text)
         if (main == null) {
             Spacer(Modifier.height(6.dp))
             Text("Tocá la cuenta donde cobrás y marcala como \"Cuenta del sueldo\" para ver solo esa.", color = C.Sub, fontSize = 12.sp)
@@ -320,5 +364,31 @@ private fun SueldoLine(label: String, value: String, color: androidx.compose.ui.
     Row(Modifier.fillMaxWidth().padding(vertical = 3.dp)) {
         Text(label, color = C.Sub, fontSize = 14.sp, modifier = Modifier.weight(1f))
         Text(value, color = color, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+    }
+}
+
+/** Cotización del dólar elegida y botón para actualizarla. Tocar un tipo lo elige para convertir. */
+@Composable
+private fun RateCard(refreshing: Boolean, onRefresh: () -> Unit) {
+    CardBox {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("Dólar ${Money.typeName}", color = C.Sub, fontSize = 14.sp)
+                val r = Money.current
+                Text(
+                    if (r != null) "Compra ${Fmt.money(r.buy)} · Venta ${Fmt.money(r.sell)}" else "Sin cotización todavía",
+                    color = C.Text, fontSize = 16.sp, fontWeight = FontWeight.Medium
+                )
+                Text(
+                    if (refreshing) "Actualizando…" else if (Money.updated.isNotBlank()) "Actualizado ${Money.updated} · dolarapi.com" else "Tocá actualizar (necesita internet)",
+                    color = C.Sub, fontSize = 12.sp
+                )
+            }
+            TextButton(onClick = onRefresh, enabled = !refreshing) { Text("Actualizar", color = C.Teal) }
+        }
+        Spacer(Modifier.height(8.dp))
+        ChoiceRow(Money.TYPES.keys.mapIndexed { i, k -> i.toLong() to (Money.TYPES[k] ?: k) }, Money.TYPES.keys.indexOf(Money.type).toLong()) { i ->
+            Money.type = Money.TYPES.keys.elementAt(i.toInt())
+        }
     }
 }

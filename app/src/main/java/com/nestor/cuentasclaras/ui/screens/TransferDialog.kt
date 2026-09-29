@@ -1,5 +1,6 @@
 package com.nestor.cuentasclaras.ui.screens
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -16,6 +17,7 @@ import com.nestor.cuentasclaras.ui.components.*
 import com.nestor.cuentasclaras.ui.theme.C
 import com.nestor.cuentasclaras.util.Dates
 import com.nestor.cuentasclaras.util.Fmt
+import com.nestor.cuentasclaras.util.Money
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
@@ -42,13 +44,18 @@ fun TransferDialog(
         mutableStateOf(initial?.accountId ?: accounts.firstOrNull { it.id != to && !it.isCard }?.id ?: accounts.getOrNull(0)?.id)
     }
     var amount by remember { mutableStateOf(initial?.let { Fmt.plain(it.amount) } ?: presetAmount?.let { Fmt.plain(it) } ?: "") }
+    var received by remember { mutableStateOf(initial?.toAmount?.let { Fmt.plain(it) } ?: "") }
     var date by remember { mutableStateOf(initial?.let { Dates.localDate(it.date) } ?: LocalDate.now()) }
     var note by remember { mutableStateOf(initial?.note ?: "") }
     var pickDate by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var confirmDelete by remember { mutableStateOf(false) }
     val today = LocalDate.now()
-    val options = accounts.map { it.id to "${it.emoji} ${it.name}" }
+    val options = accounts.map { it.id to "${it.emoji} ${it.name}" + if (it.isUsd) " (US$)" else "" }
+    val fromAcc = accounts.firstOrNull { it.id == from }
+    val toAcc = accounts.firstOrNull { it.id == to }
+    // Compra o venta de dólares: sale en una moneda y llega en otra.
+    val exchange = fromAcc != null && toAcc != null && fromAcc.currency != toAcc.currency
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -60,7 +67,21 @@ fun TransferDialog(
                 ChoiceRow(options, from) { from = it; error = null }
                 Text("Hacia", color = C.Sub, fontSize = 13.sp)
                 ChoiceRow(options, to) { to = it; error = null }
-                Field(amount, { amount = it; error = null }, "Monto", number = true)
+                Field(amount, { amount = it; error = null }, if (fromAcc?.isUsd == true) "Monto que sale (US$)" else "Monto que sale", number = true)
+                if (exchange) {
+                    Field(received, { received = it; error = null }, if (toAcc?.isUsd == true) "Monto que llega (US$)" else "Monto que llega ($)", number = true)
+                    val r = Money.current
+                    val sale = Fmt.parse(amount)
+                    if (r != null && sale > 0) {
+                        // Sugerencia con la cotización elegida: comprar dólares usa la venta, venderlos usa la compra.
+                        val suggested = if (toAcc?.isUsd == true) sale / r.sell else sale * r.buy
+                        Text(
+                            "Con el dólar ${Money.typeName} serían ${Fmt.plain(Math.round(suggested * 100) / 100.0)} · tocá para usarlo",
+                            color = C.Teal, fontSize = 12.sp,
+                            modifier = Modifier.clickable { received = Fmt.plain(Math.round(suggested * 100) / 100.0) }
+                        )
+                    }
+                }
                 Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     val yesterday = today.minusDays(1)
                     val other = date != today && date != yesterday
@@ -84,6 +105,7 @@ fun TransferDialog(
                     f == null || t == null -> error = "Elegí las dos cuentas"
                     f == t -> error = "Elegí dos cuentas distintas"
                     v <= 0 -> error = "Ingresá un monto"
+                    exchange && Fmt.parse(received) <= 0 -> error = "Ingresá cuánto llega a la otra cuenta"
                     else -> {
                         val time = when {
                             initial != null && Dates.localDate(initial.date) == date -> Dates.localTime(initial.date)
@@ -93,7 +115,8 @@ fun TransferDialog(
                         onSave(
                             Tx(
                                 id = initial?.id ?: 0, amount = v, type = TxType.TRANSFER, categoryId = 0,
-                                accountId = f, toAccountId = t, date = Dates.toMillis(date, time), note = note.trim()
+                                accountId = f, toAccountId = t, date = Dates.toMillis(date, time), note = note.trim(),
+                                toAmount = if (exchange) Fmt.parse(received) else null
                             )
                         )
                     }

@@ -24,6 +24,7 @@ import com.nestor.cuentasclaras.ui.components.*
 import com.nestor.cuentasclaras.ui.theme.C
 import com.nestor.cuentasclaras.util.Dates
 import com.nestor.cuentasclaras.util.Fmt
+import com.nestor.cuentasclaras.util.Money
 import com.nestor.cuentasclaras.util.Projection
 import java.time.LocalDate
 import java.time.YearMonth
@@ -61,8 +62,9 @@ fun ActividadScreen(
     val projected = remember(recs, month, type, accF, catFilter, query, catMap) {
         Projection.recurrings(month, recs).filter { matches(it) }.sortedBy { it.date }
     }
-    val total = filtered.sumOf { it.amount }
-    val projTotal = projected.sumOf { it.amount }
+    // Totales en pesos: lo cargado en cuentas en dólares se convierte con la cotización elegida.
+    val total = Money.sumArs(filtered, accMap)
+    val projTotal = Money.sumArs(projected, accMap)
     val days = month.lengthOfMonth()
     val daily = remember(filtered, month) {
         val arr = DoubleArray(days)
@@ -160,7 +162,7 @@ fun ActividadScreen(
                 val date = entry.key
                 val list = entry.value
                 item(key = date.toString()) {
-                    TxGroup(Dates.dayLabel(date), Fmt.money(list.sumOf { it.amount })) {
+                    TxGroup(Dates.dayLabel(date), Fmt.money(Money.sumArs(list, accMap))) {
                         list.forEachIndexed { i, t ->
                             if (i > 0) RowDivider()
                             TxRow(t, catMap[t.categoryId], accMap[t.accountId]) { onOpenTx(t) }

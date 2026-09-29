@@ -3,6 +3,8 @@
 
     <!-- Recordatorios de vencimientos (Android 13+ pide permiso al usuario) -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Cotización del dólar (dolarapi.com) -->
+    <uses-permission android:name="android.permission.INTERNET" />
 
     <application
         android:name=".CuentasApp"

@@ -1,5 +1,6 @@
 package com.nestor.cuentasclaras.util
 
+import com.nestor.cuentasclaras.data.Account
 import com.nestor.cuentasclaras.data.Tx
 import java.text.DecimalFormat
 import java.text.DecimalFormatSymbols
@@ -34,12 +35,18 @@ object Fmt {
     }
 
     /** $ 1.093.500 (formato argentino) */
-    fun money(v: Double): String {
-        if (Prefs.hideBalances) return "${Prefs.currency} •••"
-        val df = DecimalFormat(if (Prefs.showCents) "#,##0.00" else "#,##0", SYM)
+    fun money(v: Double): String = format(v, Prefs.currency)
+
+    /** Monto de una cuenta: US$ si la cuenta es en dólares (siempre con centavos). */
+    fun money(v: Double, account: Account?): String =
+        if (account?.isUsd == true) format(v, "US$", cents = true) else money(v)
+
+    private fun format(v: Double, symbol: String, cents: Boolean = Prefs.showCents): String {
+        if (Prefs.hideBalances) return "$symbol •••"
+        val df = DecimalFormat(if (cents) "#,##0.00" else "#,##0", SYM)
         val s = df.format(abs(v))
         val neg = v < 0 && s.any { it in '1'..'9' }
-        return (if (neg) "-" else "") + Prefs.currency + " " + s
+        return (if (neg) "-" else "") + symbol + " " + s
     }
 
     /** 39,1k / 1,3M para ejes de gráficos */

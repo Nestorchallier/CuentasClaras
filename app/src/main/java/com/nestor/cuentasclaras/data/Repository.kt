@@ -148,7 +148,7 @@ class Repository(private val context: Context, val db: AppDatabase) {
         val cats = db.categories().all().associateBy { it.id }
         val accs = db.accounts().all().associateBy { it.id }
         val fmt = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
-        val sb = StringBuilder("fecha,tipo,monto,categoria,cuenta,nota,cuenta_destino\n")
+        val sb = StringBuilder("fecha,tipo,monto,categoria,cuenta,nota,cuenta_destino,moneda,monto_destino\n")
         db.txs().all().forEach { t ->
             val dt = Instant.ofEpochMilli(t.date).atZone(Dates.zone).toLocalDateTime()
             val row = listOf(
@@ -162,7 +162,9 @@ class Repository(private val context: Context, val db: AppDatabase) {
                 if (t.isTransfer) "" else cats[t.categoryId]?.name ?: "",
                 accs[t.accountId]?.name ?: "",
                 t.note,
-                t.toAccountId?.let { accs[it]?.name } ?: ""
+                t.toAccountId?.let { accs[it]?.name } ?: "",
+                accs[t.accountId]?.currency ?: Currency.ARS,
+                t.toAmount?.let { BigDecimal.valueOf(it).toPlainString() } ?: ""
             )
             sb.append(row.joinToString(",") { csv(it) }).append('\n')
         }
@@ -192,9 +194,9 @@ class Repository(private val context: Context, val db: AppDatabase) {
         var failed = 0
         db.withTransaction {
             /** Busca la cuenta por nombre o la crea. */
-            suspend fun account(name: String): Long {
+            suspend fun account(name: String, currency: String = Currency.ARS): Long {
                 accs.firstOrNull { it.name.equals(name, true) }?.let { return it.id }
-                val a = Account(name = name, emoji = "🏦", position = accs.size)
+                val a = Account(name = name, emoji = if (currency == Currency.USD) "💵" else "🏦", position = accs.size, currency = currency)
                 val created = a.copy(id = db.accounts().upsert(a))
                 accs.add(created)
                 return created.id
@@ -232,11 +234,13 @@ class Repository(private val context: Context, val db: AppDatabase) {
                 val left = existing[key] ?: 0
                 if (left > 0) { existing[key] = left - 1; dup++; continue }
 
-                val accId = account(f.getOrElse(4) { "" }.trim().ifBlank { "Efectivo" })
+                val currency = if (f.getOrElse(7) { "" }.trim().equals(Currency.USD, true)) Currency.USD else Currency.ARS
+                val accId = account(f.getOrElse(4) { "" }.trim().ifBlank { "Efectivo" }, currency)
                 val toId = if (type == TxType.TRANSFER) account(toName) else null
                 db.txs().upsert(
                     Tx(amount = abs(amount), type = type, categoryId = catId, accountId = accId, date = date,
-                        note = note, toAccountId = toId)
+                        note = note, toAccountId = toId,
+                        toAmount = if (type == TxType.TRANSFER) f.getOrNull(8)?.let { Fmt.parseOrNull(it) }?.let { abs(it) } else null)
                 )
                 n++
             }

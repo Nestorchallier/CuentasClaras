@@ -57,7 +57,7 @@ fun CardDetailScreen(vm: MainViewModel, cardId: Long, onBack: () -> Unit, onOpen
             item {
                 CardBox {
                     Text("Deuda total de la tarjeta", color = C.Sub, fontSize = 14.sp)
-                    Text(Fmt.money(-debt), color = C.Text, fontSize = 30.sp, fontWeight = FontWeight.Bold)
+                    Text(Fmt.money(-debt, card), color = C.Text, fontSize = 30.sp, fontWeight = FontWeight.Bold)
                     Text("Incluye las cuotas que faltan.", color = C.Sub, fontSize = 12.sp)
                     if (card.closingDay == 0 || card.dueDay == 0) {
                         Spacer(Modifier.height(6.dp))
@@ -69,7 +69,7 @@ fun CardDetailScreen(vm: MainViewModel, cardId: Long, onBack: () -> Unit, onOpen
                 item {
                     CardBox {
                         Text("Resumen cerrado · vence ${Fmt.shortDate(toPay.due)}", color = C.Sub, fontSize = 14.sp)
-                        Text(Fmt.money(toPay.total), color = C.Red, fontSize = 26.sp, fontWeight = FontWeight.Bold)
+                        Text(Fmt.money(toPay.total, card), color = C.Red, fontSize = 26.sp, fontWeight = FontWeight.Bold)
                         Spacer(Modifier.height(10.dp))
                         PrimaryButton("Pagar tarjeta") { paying = true }
                     }
@@ -84,7 +84,7 @@ fun CardDetailScreen(vm: MainViewModel, cardId: Long, onBack: () -> Unit, onOpen
                 val st = upcoming[i]
                 TxGroup(
                     "Cierra ${Fmt.shortDate(st.closing)} · vence ${Fmt.shortDate(st.due)}",
-                    Fmt.money(st.total)
+                    Fmt.money(st.total, card)
                 ) {
                     if (st.txs.isEmpty()) {
                         Text("Sin movimientos", color = C.Sub, fontSize = 14.sp, modifier = Modifier.padding(14.dp))

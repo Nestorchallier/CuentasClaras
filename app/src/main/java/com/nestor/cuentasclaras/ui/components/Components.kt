@@ -146,7 +146,7 @@ fun TxRow(tx: Tx, cat: Category?, acc: Account?, onClick: () -> Unit) {
         Spacer(Modifier.width(8.dp))
         val income = tx.type == TxType.INGRESO
         Text(
-            (if (income) "+" else "") + Fmt.money(tx.amount),
+            (if (income) "+" else "") + Fmt.money(tx.amount, acc),
             color = if (income) C.Green else C.Text, fontSize = 16.sp, fontWeight = FontWeight.Medium
         )
     }

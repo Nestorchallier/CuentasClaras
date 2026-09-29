@@ -36,8 +36,17 @@ data class Account(
     /** Día del mes en que cierra el resumen (solo tarjetas). */
     @ColumnInfo(defaultValue = "0") val closingDay: Int = 0,
     /** Día del mes en que vence el resumen (solo tarjetas). */
-    @ColumnInfo(defaultValue = "0") val dueDay: Int = 0
-)
+    @ColumnInfo(defaultValue = "0") val dueDay: Int = 0,
+    /** Moneda de la cuenta: [Currency.ARS] o [Currency.USD]. Sus movimientos están en esa moneda. */
+    val currency: String = Currency.ARS
+) {
+    val isUsd: Boolean get() = currency == Currency.USD
+}
+
+object Currency {
+    const val ARS = "ARS"
+    const val USD = "USD"
+}
 
 @Entity(
     tableName = "transactions",
@@ -64,7 +73,12 @@ data class Tx(
      */
     @ColumnInfo(defaultValue = "0") val installments: Int = 0,
     /** Identifica todas las cuotas de una misma compra. */
-    val groupId: Long? = null
+    val groupId: Long? = null,
+    /**
+     * Solo en transferencias entre monedas distintas (compra/venta de dólares): lo que llega a la
+     * cuenta destino, en su moneda. Si es null, llega lo mismo que sale ([amount]).
+     */
+    val toAmount: Double? = null
 ) {
     val isTransfer: Boolean get() = type == TxType.TRANSFER
 }
