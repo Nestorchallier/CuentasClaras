@@ -28,7 +28,7 @@ import kotlinx.coroutines.launch
 class QuickAddActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        C.apply(this)
+        C.applyTheme(this)
         val type = if (intent?.data?.lastPathSegment == TxType.INGRESO) TxType.INGRESO else TxType.GASTO
         val repo = applicationContext.repo
 

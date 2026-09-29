@@ -115,7 +115,7 @@ fun TransferDialog(
                         onSave(
                             Tx(
                                 id = initial?.id ?: 0, amount = v, type = TxType.TRANSFER, categoryId = 0,
-                                accountId = f, toAccountId = t, date = Dates.toMillis(date, time), note = note.trim(),
+                                accountId = f!!, toAccountId = t, date = Dates.toMillis(date, time), note = note.trim(),
                                 toAmount = if (exchange) Fmt.parse(received) else null
                             )
                         )

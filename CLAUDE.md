@@ -4,7 +4,7 @@
 > Antes de cambios grandes, proponé un plan corto y esperá confirmación. Después de cada cambio, compilá (`./gradlew assembleDebug`) y corregí errores antes de dar la tarea por terminada.
 
 ## Qué es
-App Android nativa de finanzas personales (gastos, ingresos, cuentas, presupuestos, recurrentes) con **widgets de pantalla de inicio**. Es de **uso personal** de Nestor (y de algún amigo al que le pase el APK). Versión actual **1.1** (versionCode 2). El objetivo es **mejorarla y agregarle funciones**, no publicarla.
+App Android nativa de finanzas personales (gastos, ingresos, cuentas, presupuestos, recurrentes) con **widgets de pantalla de inicio**. Es de **uso personal** de Nestor (y de algún amigo al que le pase el APK). Versión actual **1.3** (versionCode 4). El objetivo es **mejorarla y agregarle funciones**, no publicarla.
 
 Inspiración visual: la app "Quanto: Gastos y Presupuesto" (estética oscura con degradés, barras redondeadas, dona por categoría). Mantener ese estilo en las pantallas nuevas.
 
@@ -19,17 +19,19 @@ Inspiración visual: la app "Quanto: Gastos y Presupuesto" (estética oscura con
 ## Estructura (`app/src/main/java/com/nestor/cuentasclaras/`)
 - `CuentasApp.kt` — Application: `Prefs.init`, crea `Repository`, siembra datos por defecto y procesa recurrentes. Extensión `Context.repo`.
 - `data/`
-  - `Entities.kt` — `Category(id,name,emoji,color:Long,type,budget,position)`, `Account(id,name,emoji,initialBalance,position)`, `Tx(id,amount,type,categoryId,accountId,date:epochMillis,note,recurringId?)`, `Recurring(id,name,amount,type,categoryId,accountId,dayOfMonth,lastGenerated "yyyy-MM")`. `TxType.GASTO/INGRESO` son Strings.
-  - `Daos.kt`, `AppDatabase.kt` (versión 1, `exportSchema = false`, **sin migraciones todavía**).
-  - `Repository.kt` — única puerta de escritura. Toda escritura llama `WidgetUpdater.refresh()`. Incluye `processRecurrings()`, `exportCsv()`, `importCsv()`.
+  - `Entities.kt` — `Category(id,name,emoji,color:Long,type,budget,position)`, `Account(id,name,emoji,initialBalance,position,isCard,closingDay,dueDay,currency)`, `Tx(id,amount,type,categoryId,accountId,date:epochMillis,note,recurringId?,toAccountId?,installment,installments,groupId?,toAmount?)`, `Recurring(id,name,amount,type,categoryId,accountId,dayOfMonth,lastGenerated "yyyy-MM")`. `TxType.GASTO/INGRESO/TRANSFER` son Strings (las transferencias tienen `categoryId = 0`). `Currency.ARS/USD`.
+  - `Daos.kt`, `AppDatabase.kt` (versión 4, `exportSchema = true` en `app/schemas`), `Migrations.kt` (1→2 transferencias, 2→3 tarjetas/cuotas, 3→4 moneda).
+  - `Repository.kt` — única puerta de escritura. Toda escritura llama `WidgetUpdater.refresh()`. Incluye `processRecurrings()` (con Mutex + transacción), cuotas (`saveTx` divide si `installments > 1`), `exportCsv()`, `importCsv()` (detecta separador, no duplica).
   - `Defaults.kt` — paleta, categorías/cuentas iniciales, "adiciones rápidas", emojis.
 - `util/Prefs.kt` — SharedPreferences expuestas como state de Compose (moneda, centavos, ocultar saldos, tarjetas de General). `GeneralCards` = catálogo de tarjetas.
-- `util/Format.kt` — `Fmt` (formato argentino `$ 1.093.500`, compacto, %, parseo), `Dates` (rangos de mes, etiquetas Hoy/Ayer/Mañana), `Projection` (recurrentes programados no generados).
+- `util/Format.kt` — `Fmt` (formato argentino `$ 1.093.500`, `money(v, cuenta)` con US$, compacto, %, `parseOrNull` único para montos), `Dates` (rangos de mes, etiquetas Hoy/Ayer/Mañana), `Projection` (recurrentes programados no generados).
+- `util/Balances.kt` (saldos con transferencias, total en pesos), `util/CardCycle.kt` (resúmenes de tarjeta), `util/Money.kt` (cotización dolarapi.com, conversión a pesos).
+- `reminders/Reminders.kt` (WorkManager: vencimientos 9 hs, aviso diario 21 hs), `backup/Backup.kt` (CSV semanal a carpeta SAF).
 - `ui/MainActivity.kt` — navegación propia: 5 pestañas (0 Actividad, 1 Resumen, 2 Presupuesto, 3 General, 4 Cuentas) + pila de `Route` (Editor, Settings, Categories, Recurrings, CategoryDetail). Deep link desde widgets `cuentasclaras://open/<tab>`.
 - `ui/MainViewModel.kt` — StateFlows de txs/categorías/cuentas/recurrentes + filtros compartidos (mes, tipo, cuenta).
 - `ui/components/` — `Components.kt` (Pill, DropPill, CardBox, EmojiBadge, TxRow, MonthSwitcher, MonthGrid, Field…), `Charts.kt` (BarChart, DonutChart, RingProgress en Canvas).
 - `ui/screens/` — Actividad, Resumen, CategoryDetail, Presupuesto, General (tarjetas configurables), Cuentas, Ajustes, Categorías, Recurrentes, `TxEditor` (teclado numérico propio; se reutiliza en la hoja de widgets).
-- `ui/theme/Theme.kt` — objeto `C` con los colores; tema oscuro.
+- `ui/theme/Theme.kt` — objeto `C` con los colores en versión oscura y clara (`C.dark`, `Prefs.theme`). Widgets: `widget/WColors.kt` + `drawable-night`.
 - `widget/` — Glance: `DashboardWidget` (resumen mes), `QuickAddWidget` (− Gasto / + Ingreso), `MoreWidgets.kt` (Actividad, Resumen/dona, Cuentas; base `SnapshotWidget`), `WidgetData.kt` (Snapshot + bitmaps de gráficos), `WidgetUpdater.kt`, `QuickAddActivity` (hoja translúcida con `TxEditor`).
 
 ## Convenciones y trampas conocidas

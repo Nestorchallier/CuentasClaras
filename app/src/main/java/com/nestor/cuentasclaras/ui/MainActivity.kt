@@ -42,7 +42,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        C.apply(this)
+        C.applyTheme(this)
         // Los widgets abren la app en una pestaña: cuentasclaras://open/<n>
         val startTab = intent?.data?.takeIf { it.host == "open" }?.lastPathSegment?.toIntOrNull()?.coerceIn(0, 4) ?: 0
         setContent { AppTheme { AppRoot(vm, startTab) } }

@@ -49,7 +49,7 @@ object C {
      * Decide el tema según Ajustes ("dark", "light" o "system") y ajusta las barras del sistema.
      * Llamar en onCreate de cada actividad, antes de setContent.
      */
-    fun apply(activity: ComponentActivity) {
+    fun applyTheme(activity: ComponentActivity) {
         dark = isDark(activity)
         val transparent = android.graphics.Color.TRANSPARENT
         val bars = if (dark) SystemBarStyle.dark(transparent) else SystemBarStyle.light(transparent, transparent)
