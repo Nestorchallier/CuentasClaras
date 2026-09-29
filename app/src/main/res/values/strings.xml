@@ -10,4 +10,8 @@
     <string name="widget_resumen_desc">Dona con la distribución de gastos del mes</string>
     <string name="widget_cuentas">Saldos de cuentas</string>
     <string name="widget_cuentas_desc">Saldo total y de cada cuenta</string>
+    <string name="shortcut_gasto">Nuevo gasto</string>
+    <string name="shortcut_gasto_long">Cargar un gasto</string>
+    <string name="shortcut_ingreso">Nuevo ingreso</string>
+    <string name="shortcut_ingreso_long">Cargar un ingreso</string>
 </resources>

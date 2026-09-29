@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Accesos directos del ícono de la app. Abren la hoja de carga rápida (la misma del widget). -->
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_gasto"
+        android:shortcutId="nuevo_gasto"
+        android:shortcutLongLabel="@string/shortcut_gasto_long"
+        android:shortcutShortLabel="@string/shortcut_gasto">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:data="cuentasclaras://quickadd/GASTO"
+            android:targetClass="com.nestor.cuentasclaras.widget.QuickAddActivity"
+            android:targetPackage="com.nestor.cuentasclaras" />
+    </shortcut>
+    <shortcut
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_ingreso"
+        android:shortcutId="nuevo_ingreso"
+        android:shortcutLongLabel="@string/shortcut_ingreso_long"
+        android:shortcutShortLabel="@string/shortcut_ingreso">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:data="cuentasclaras://quickadd/INGRESO"
+            android:targetClass="com.nestor.cuentasclaras.widget.QuickAddActivity"
+            android:targetPackage="com.nestor.cuentasclaras" />
+    </shortcut>
+</shortcuts>

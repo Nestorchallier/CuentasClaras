@@ -23,12 +23,18 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <!-- Accesos directos: mantener apretado el ícono → "Nuevo gasto" / "Nuevo ingreso".
+                 También los usan apps de gestos (ej. doble toque atrás con "Tap, Tap"). -->
+            <meta-data
+                android:name="android.app.shortcuts"
+                android:resource="@xml/shortcuts" />
         </activity>
 
-        <!-- Hoja flotante de carga rápida que abren los widgets -->
+        <!-- Hoja flotante de carga rápida que abren los widgets y los accesos directos.
+             Exportada para que las apps de gestos puedan abrirla (solo muestra el formulario). -->
         <activity
             android:name=".widget.QuickAddActivity"
-            android:exported="false"
+            android:exported="true"
             android:excludeFromRecents="true"
             android:taskAffinity=""
             android:theme="@style/Theme.CuentasClaras.Translucent"
