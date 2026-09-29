@@ -57,6 +57,9 @@ interface TxDao {
     @Query("SELECT * FROM transactions ORDER BY date DESC, id DESC")
     suspend fun all(): List<Tx>
 
+    @Query("SELECT * FROM transactions WHERE id = :id")
+    suspend fun get(id: Long): Tx?
+
     @Upsert
     suspend fun upsert(item: Tx): Long
 

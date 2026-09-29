@@ -7,6 +7,7 @@ import com.nestor.cuentasclaras.data.AppDatabase
 import com.nestor.cuentasclaras.data.Repository
 import com.nestor.cuentasclaras.reminders.Reminders
 import com.nestor.cuentasclaras.sync.CloudSync
+import com.nestor.cuentasclaras.capture.TelegramBot
 import com.nestor.cuentasclaras.util.Money
 import com.nestor.cuentasclaras.util.Prefs
 import kotlinx.coroutines.CoroutineScope
@@ -27,6 +28,7 @@ class CuentasApp : Application() {
         Reminders.schedule(this)
         Backup.schedule(this)
         CloudSync.init(this)
+        TelegramBot.schedule(this)
         appScope.launch {
             repo.seedIfEmpty()
             repo.processRecurrings()

@@ -34,6 +34,14 @@ import com.nestor.cuentasclaras.ui.screens.*
 import com.nestor.cuentasclaras.ui.theme.AppTheme
 import com.nestor.cuentasclaras.ui.theme.C
 import com.nestor.cuentasclaras.reminders.Reminders
+import com.nestor.cuentasclaras.capture.TelegramBot
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import com.nestor.cuentasclaras.util.Prefs
 
 class MainActivity : ComponentActivity() {
@@ -46,6 +54,22 @@ class MainActivity : ComponentActivity() {
         // Los widgets abren la app en una pestaña: cuentasclaras://open/<n>
         val startTab = intent?.data?.takeIf { it.host == "open" }?.lastPathSegment?.toIntOrNull()?.coerceIn(0, 4) ?: 0
         setContent { AppTheme { AppRoot(vm, startTab) } }
+
+        // Bot de Telegram: con la app abierta, esperar mensajes en vivo.
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                while (isActive) {
+                    if (!TelegramBot.enabled) { delay(5_000); continue }
+                    try {
+                        TelegramBot.poll(this@MainActivity, waitSeconds = 25)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        delay(15_000) // sin internet o token inválido: reintentar más tarde
+                    }
+                }
+            }
+        }
 
         // Recordatorios: en Android 13+ hay que pedir permiso para notificar (una sola vez).
         if (Build.VERSION.SDK_INT >= 33 && Prefs.remindDue && !Reminders.canNotify(this) && !Prefs.askedNotifications) {

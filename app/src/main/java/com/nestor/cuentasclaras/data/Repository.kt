@@ -34,14 +34,18 @@ class Repository(private val context: Context, val db: AppDatabase) {
     }
 
     // ---------- Movimientos ----------
-    suspend fun saveTx(t: Tx) {
+    /** Guarda el movimiento. Devuelve su id si es nuevo (o el que ya tenía; -1 si se dividió en cuotas). */
+    suspend fun saveTx(t: Tx): Long {
         // Para los avisos (presupuesto, gasto grande, poca plata) se compara antes y después de guardar.
         val before = if (t.type == TxType.GASTO) db.txs().all() else emptyList()
-        if (t.id == 0L && t.installments > 1 && t.installment == 0) saveInstallments(t)
-        else db.txs().upsert(t)
+        val id = if (t.id == 0L && t.installments > 1 && t.installment == 0) { saveInstallments(t); -1L }
+        else db.txs().upsert(t).let { if (t.id == 0L) it else t.id }
         changed()
         if (t.type == TxType.GASTO) runCatching { Alerts.afterSave(context, db, t, before) }
+        return id
     }
+
+    suspend fun txById(id: Long): Tx? = db.txs().get(id)
     suspend fun deleteTx(t: Tx) { db.txs().delete(t); changed() }
 
     /** Borra todas las cuotas de una compra. */
